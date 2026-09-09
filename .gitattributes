@@ -1,0 +1,31 @@
+# Development happens on Windows; CI runs on Linux; the tablet build runs on
+# both. Normalising to LF in the repository keeps diffs meaningful and stops
+# line endings from showing up as spurious changes in the audit trail.
+* text=auto eol=lf
+
+# Scripts that Windows must execute keep CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary assets — never normalise, never diff.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.ttf    binary
+*.otf    binary
+*.wav    binary
+*.mp3    binary
+*.m4a    binary
+*.jks    binary
+*.keystore binary
+*.p12    binary
+
+# Golden test images are compared byte-for-byte by the test runner.
+**/goldens/**  binary
+
+# Generated lockfiles are committed (reproducible builds) but collapsed in
+# review, since they are machine-written.
+pubspec.lock  linguist-generated=true -diff

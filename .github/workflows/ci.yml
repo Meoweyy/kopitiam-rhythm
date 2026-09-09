@@ -1,0 +1,80 @@
+name: CI
+
+# The SDK version is part of the measurement instrument, not an incidental
+# detail: Flutter's pointer-resampling behaviour sits in the timing path, so an
+# unnoticed SDK change is a protocol deviation. CI therefore pins the version
+# from .flutter-version rather than tracking "stable".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core:
+    name: Measurement core (pure Dart)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sdk
+        name: Read pinned Flutter version
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.sdk.outputs.version }}
+          channel: stable
+          cache: true
+
+      - name: Confirm the SDK is exactly the pinned version
+        run: |
+          set -e
+          pinned="$(cat .flutter-version)"
+          actual="$(flutter --version | head -n1 | awk '{print $2}')"
+          echo "pinned=$pinned actual=$actual"
+          if [ "$pinned" != "$actual" ]; then
+            echo "::error::Flutter $actual does not match the pinned $pinned."
+            echo "::error::The SDK version is part of the instrument. Update"
+            echo "::error::.flutter-version deliberately and re-run the timing"
+            echo "::error::validation suite before collecting more data."
+            exit 1
+          fi
+
+      - run: dart pub get
+        working-directory: packages/kopitiam_core
+
+      - name: Analyze
+        run: dart analyze --fatal-infos
+        working-directory: packages/kopitiam_core
+
+      # Includes the architectural purity guard: the domain may never reach a UI
+      # framework, a filesystem or a database.
+      - name: Test
+        run: dart test
+        working-directory: packages/kopitiam_core
+
+  app:
+    name: Flutter app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sdk
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.sdk.outputs.version }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+        working-directory: app
+
+      - run: flutter analyze
+        working-directory: app
+
+      - run: flutter test
+        working-directory: app

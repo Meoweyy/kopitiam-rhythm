@@ -1,0 +1,115 @@
+# ---------------------------------------------------------------------------
+# PARTICIPANT DATA — NEVER COMMIT
+# ---------------------------------------------------------------------------
+# This repository is public-adjacent (a private GitHub remote is still a copy
+# on someone else's server). Nothing that could identify a participant, and no
+# collected data, may ever enter git history. Once committed, a file is in the
+# history even after deletion.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.wav
+*.m4a
+*.jsonl
+/data/
+/export/
+/mirror/
+**/participant_data/
+allocation*.csv          # the sealed randomisation list
+pin_hash*
+*.local.json
+
+# ---------------------------------------------------------------------------
+# Flutter / Dart
+# ---------------------------------------------------------------------------
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.dart.js
+*.info.json
+*.js_
+*.js.deps
+*.js.map
+doc/api/
+coverage/
+.fvm/
+
+# Generated golden-test failure output (the goldens themselves ARE committed)
+**/failures/
+
+# ---------------------------------------------------------------------------
+# Android
+# ---------------------------------------------------------------------------
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/.cxx/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/key.properties
+*.jks
+*.keystore
+
+# ---------------------------------------------------------------------------
+# iOS (from Dec 2026)
+# ---------------------------------------------------------------------------
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/*.mobileprovision
+**/*.p12
+
+# ---------------------------------------------------------------------------
+# Desktop targets (used for M0–M7 development)
+# ---------------------------------------------------------------------------
+**/windows/flutter/ephemeral/
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+
+# ---------------------------------------------------------------------------
+# Native build artefacts (shared/dsp, Oboe)
+# ---------------------------------------------------------------------------
+cmake-build-*/
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+
+# ---------------------------------------------------------------------------
+# Python tooling (tools/)
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+desktop.ini

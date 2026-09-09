@@ -1,0 +1,24 @@
+name: kopitiam_core
+description: >-
+  Pure Dart core of the Kopitiam Rhythm measurement instrument: ports, protocol
+  constants, session/block engine, pattern generation, adaptive policies and the
+  timing analysis pipeline.
+
+  This package deliberately has NO dependency on Flutter, on any database, or on
+  dart:io. That is not a convention, it is the build graph: code here physically
+  cannot reach a UI framework or a filesystem, so the domain stays testable,
+  deterministic and headless. Adapters live in the app package.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  # Intentionally empty. Adding a dependency here is an architectural decision:
+  # anything listed becomes reachable from the domain. Nothing that touches
+  # Flutter, sqflite, or dart:io may be added — purity_test.dart enforces it.
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
