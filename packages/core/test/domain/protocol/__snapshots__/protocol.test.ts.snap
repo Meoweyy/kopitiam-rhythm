@@ -1,0 +1,136 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`protocol constants > matches the locked snapshot 1`] = `
+"{
+  "version": "v1.0.0",
+  "tempo": {
+    "minMs": 500,
+    "maxMs": 900,
+    "minIntervalsForEstimate": 8
+  },
+  "speedTap": {
+    "durationMs": 10000,
+    "handsPerBlock": 2
+  },
+  "naturalTempo": {
+    "durationMs": 10000
+  },
+  "patterns": {
+    "startLength": 3,
+    "minLength": 3,
+    "scoredLength": 4,
+    "probesPerBlock": 8,
+    "maxSameSideRun": 2,
+    "minHammingDistanceFromPrevious": 2,
+    "antiRepeatSessions": 2,
+    "maxGenerationAttempts": 200
+  },
+  "staircase": {
+    "successesToStepUp": 2,
+    "failuresToStepDown": 1,
+    "floorLength": 3,
+    "maxExtraTapsForSuccess": 1,
+    "minMatchedFractionForValid": 0.5,
+    "consecutiveInvalidToAbort": 3
+  },
+  "matching": {
+    "windowFraction": 0.5
+  },
+  "cleaning": {
+    "debounceMs": 100,
+    "speedTapDebounceMs": 70,
+    "longPressRestMs": 800,
+    "itiOutlierLowFactor": 0.5,
+    "itiOutlierHighFactor": 1.5,
+    "skippedBeatLowFactor": 1.75,
+    "skippedBeatHighFactor": 2.25,
+    "madOutlierSigma": 3,
+    "maxExcludedProportion": 0.2
+  },
+  "sufficiency": {
+    "minIntervalsForCv": 10,
+    "minIntervalsForWingKristofferson": 25,
+    "minMatchedForAsynchrony": 8
+  },
+  "mirror": {
+    "tempoInflation": 1.12,
+    "practiceTrials": 1,
+    "comprehensionItems": 2,
+    "comprehensionAttempts": 3
+  },
+  "blackout": {
+    "transitionIntervalsExcluded": 2,
+    "measurementCuedBeats": 8,
+    "measurementContinuationMs": 25000,
+    "trailingClicks": 3
+  },
+  "cueLadder": [
+    {
+      "level": 0,
+      "cuedBeats": 16,
+      "continuationMs": 10000
+    },
+    {
+      "level": 1,
+      "cuedBeats": 12,
+      "continuationMs": 10000
+    },
+    {
+      "level": 2,
+      "cuedBeats": 10,
+      "continuationMs": 12000
+    },
+    {
+      "level": 3,
+      "cuedBeats": 8,
+      "continuationMs": 12000
+    },
+    {
+      "level": 4,
+      "cuedBeats": 6,
+      "continuationMs": 14000
+    },
+    {
+      "level": 5,
+      "cuedBeats": 6,
+      "continuationMs": 16000
+    },
+    {
+      "level": 6,
+      "cuedBeats": 4,
+      "continuationMs": 16000
+    },
+    {
+      "level": 7,
+      "cuedBeats": 4,
+      "continuationMs": 18000
+    },
+    {
+      "level": 8,
+      "cuedBeats": 3,
+      "continuationMs": 20000
+    }
+  ],
+  "cueFading": {
+    "rollingWindow": 3,
+    "minValidTrialsForStepUp": 3,
+    "cvFloorUp": 0.05,
+    "cvFloorDown": 0.09,
+    "cvUpMultiplier": 1.25,
+    "cvDownMultiplier": 1.75,
+    "driftRatioTolerance": 0.25,
+    "minValidContinuationTapFraction": 0.6,
+    "maxStepUpsPerSession": 2,
+    "hysteresisSuccessesAfterStepDown": 2,
+    "maxLevelDropWithinSession": 2,
+    "freezeAfterStepDownsInSession": 2,
+    "warmUpLevelDrop": 1
+  },
+  "session": {
+    "maxOnTaskMs": 1500000,
+    "restIntervalMs": 240000,
+    "leadInMs": 1500,
+    "trialGraceMs": 1000
+  }
+}"
+`;

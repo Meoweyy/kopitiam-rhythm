@@ -18,4 +18,17 @@
  * glance and an accidental export of an internal type is visible in review.
  */
 
-export {};
+// M1 — deterministic randomness.
+export { Pcg32 } from './core/rng/pcg32';
+export {
+  blockSeed,
+  fnv1a64,
+  sessionSeed,
+  splitmix64,
+  studySeedFrom,
+  trialSeed,
+} from './core/rng/seeds';
+
+// M1 — the study's constants, versioned and frozen.
+export { PROTOCOL, PROTOCOL_VERSION, protocolToJson } from './domain/protocol/protocol';
+export type { ProtocolConstants } from './domain/protocol/protocol';
