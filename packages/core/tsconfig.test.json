@@ -1,0 +1,12 @@
+{
+  // Tests may use Node APIs — the architectural purity guard has to read files
+  // off disk to check them. That freedom stops at the `src/` boundary: this
+  // config covers `test/` only, and `tsconfig.json` (which bans Node and DOM
+  // types entirely) covers the code that ships.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["test/**/*.ts", "src/**/*.ts"]
+}

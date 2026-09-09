@@ -25,53 +25,68 @@ collection; a study that baked a wrong constant into its raw data is dead, where
 raw values plus a calibration row is re-analysed in ten minutes. This rule also makes the classic
 "was the correction applied twice?" bug structurally impossible.
 
-### 2. Scored taps never come from Flutter's gesture system.
+### 2. Scored taps never come from React Native's touch system.
 
-`GestureDetector` timestamps pass through the Flutter event loop and pick up 5–30 ms of
-*load-dependent* latency. Because it varies, it inflates measured **variability** — which is the
-primary outcome. A device that janks more would look like a participant with worse rhythm.
+`onPressIn` timestamps pass through the JS thread and pick up 5–30 ms of *load-dependent*
+latency. Because it varies, it inflates measured **variability** — which is the primary outcome.
+A device that janks more would look like a participant with worse rhythm.
 
 Scored taps come from the native touch hook (`MotionEvent.getEventTime()`, stamped by the kernel
-input layer). Flutter pointer events drive visuals only. There is a test asserting that a
-`GestureDetector` tap produces no row in `tap`.
+input layer, captured in `MainActivity.dispatchTouchEvent`). React's touch events drive visuals
+only. There is a test asserting that a React press produces no scored row.
 
-### 3. `domain/` and `analysis/` are pure Dart.
+### 3. The measurement core is pure TypeScript.
 
-No `package:flutter`, no `sqflite`, no `dart:io`. Enforced in CI. This is what lets a synthetic
-15-session participant run headless in under a second, and what lets the statistical pipeline be
-tested against data with known ground truth.
+`packages/core` compiles with `"lib": ["ES2022"]` and `"types": []`, and lists no runtime
+dependencies. So `react-native`, `process`, `document` and `fetch` do not resolve inside it — a
+violation is a **compile error**, not a lint someone can suppress. `purity.test.ts` guards the
+ways that guarantee could be undone later.
+
+This is what lets a synthetic 15-session participant run headless in under a second, and what
+lets the statistical pipeline be tested against data with known ground truth.
 
 ---
 
 ## Layout
 
+npm workspaces monorepo.
+
 ```
-app/          Flutter application
-  lib/domain/     ports + protocol + blocks + session engine  (pure)
-  lib/analysis/   cleaning, matching, metrics                  (pure)
-  lib/timing/     adapters implementing domain/ports (fake + native)
-  lib/data/       SQLite, repositories, CSV export
-  lib/ui/         kopitiam presenters, researcher screens
-shared/dsp/   platform-neutral C++ compiled into BOTH Android and iOS, so the
-              two builds cannot drift into being different instruments
-tools/        Python: loopback analysis, offline vocal onset detection
-docs/         timing methods, calibration protocol, device qualification
+packages/core/    the measurement core — PURE TypeScript, no React, no Node, no DOM
+  src/domain/       ports + protocol + blocks + session engine
+  src/analysis/     cleaning, matching, metrics
+app/              React Native 0.87 shell
+  src/timing/       adapters implementing the core's ports (fake + native)
+  src/data/         SQLite, repositories, CSV export
+  src/ui/           kopitiam presenters, researcher screens
+  android/          Kotlin touch hook (M8), Oboe audio (M9)
+  ios/              Swift adapters (Dec 2026)
+shared/dsp/       platform-neutral C++ compiled into BOTH Android and iOS, so the
+                  two builds cannot drift into being different instruments
+tools/            Python: loopback analysis, offline vocal onset detection
+docs/             timing methods, calibration protocol, device qualification
 ```
 
-The architecture in one line: `domain/ports/` names what the game needs, `timing/fake/` and
-`timing/native/` supply it, and `bootstrap.dart` is the only file that knows both sides.
+The architecture in one line: `packages/core/src/domain/ports/` names what the game needs,
+`app/src/timing/fake/` and `app/src/timing/native/` supply it, and one composition root picks.
 
 ---
 
 ## Running it
 
 ```bash
-cd app
-flutter run -d windows                                # whole game, fakes, no tablet needed
-dart test                                             # domain + analysis, pure
-flutter test                                          # widgets, goldens
-flutter run -d <tablet> --dart-define=AUTOPILOT=true  # real DB + UI, synthetic tapper
+npm ci                                    # once, from the repo root
+
+npm run test:core                         # measurement core, headless, ~2 s
+npm run typecheck                         # both workspaces
+npm run verify                            # typecheck + lint + test, everything
+
+npm start                                 # Metro bundler
+npm run android                           # onto a connected tablet
 ```
+
+Note there is **no browser dev target**: React Native needs a device or emulator, so the Android
+SDK is required from M3 onward. The core, however, is testable with Node alone.
 
 ---
 
@@ -81,8 +96,12 @@ Every session records `protocol_version`, `generator_version`, `policy_version`,
 `analysis_version`, `app_version`, `schema_version` and its `session_seed`. A session's exact
 stimulus sequence can be regenerated from the seed alone.
 
-The SDK version is **pinned** and checked in CI: Flutter's pointer resampling behaviour is part of
-the measurement path, so a mid-trial `flutter upgrade` is a protocol deviation, not a chore.
+Randomness in the core is a seeded PCG32, never `Math.random()` or a platform source — that is
+what makes a session reproducible, and it is why `crypto` is on the forbidden-import list.
+
+Dependencies are pinned by the lockfile and CI installs with `npm ci`. React Native's touch
+delivery is part of the measurement path, so a mid-trial dependency bump is a protocol deviation,
+not a chore.
 
 Before data collection begins, `Protocol`, the pattern generator and the analysis module are
 frozen and the collecting release is tagged.

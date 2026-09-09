@@ -1,0 +1,21 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+
+    // The core is consumed from source rather than from a build output: one
+    // repository, one compile, no stale dist/ to get out of sync with src/.
+    // Paths resolve relative to this file (baseUrl is deprecated in TS 6).
+    "paths": {
+      "@kopitiam/core": ["../packages/core/src/index.ts"],
+      "@kopitiam/core/*": ["../packages/core/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["**/node_modules", "**/Pods", "android", "ios"]
+}

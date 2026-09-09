@@ -1,10 +1,9 @@
 # ---------------------------------------------------------------------------
 # PARTICIPANT DATA — NEVER COMMIT
 # ---------------------------------------------------------------------------
-# This repository is public-adjacent (a private GitHub remote is still a copy
-# on someone else's server). Nothing that could identify a participant, and no
-# collected data, may ever enter git history. Once committed, a file is in the
-# history even after deletion.
+# A private GitHub remote is still a copy on someone else's server, and git
+# history outlives deletion. Nothing that could identify a participant, and no
+# collected data, may ever enter this repository.
 *.db
 *.db-wal
 *.db-shm
@@ -22,63 +21,53 @@ pin_hash*
 *.local.json
 
 # ---------------------------------------------------------------------------
-# Flutter / Dart
+# Node / JavaScript
 # ---------------------------------------------------------------------------
-.dart_tool/
-.packages
-.pub-cache/
-.pub/
-build/
-.flutter-plugins
-.flutter-plugins-dependencies
-*.dart.js
-*.info.json
-*.js_
-*.js.deps
-*.js.map
-doc/api/
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm/
+*.tsbuildinfo
 coverage/
-.fvm/
+.eslintcache
 
-# Generated golden-test failure output (the goldens themselves ARE committed)
-**/failures/
+# Metro
+.metro-health-check*
+/app/.metro/
+
+# Vitest / Jest
+/packages/*/coverage/
 
 # ---------------------------------------------------------------------------
-# Android
+# React Native — Android
 # ---------------------------------------------------------------------------
-**/android/**/gradle-wrapper.jar
-**/android/.gradle
-**/android/captures/
+**/android/.gradle/
 **/android/.cxx/
-**/android/gradlew
-**/android/gradlew.bat
+**/android/build/
+**/android/app/build/
 **/android/local.properties
-**/android/key.properties
+**/android/keystores/
+**/android/.idea/
 *.jks
 *.keystore
+!debug.keystore
+*.apk
+*.aab
+*.hprof
 
 # ---------------------------------------------------------------------------
-# iOS (from Dec 2026)
+# React Native — iOS (from Dec 2026)
 # ---------------------------------------------------------------------------
 **/ios/Pods/
-**/ios/.symlinks/
-**/ios/Flutter/App.framework
-**/ios/Flutter/Flutter.framework
-**/ios/Flutter/Flutter.podspec
-**/ios/Flutter/Generated.xcconfig
-**/ios/Flutter/flutter_export_environment.sh
-**/ios/Flutter/ephemeral/
-**/ios/ServiceDefinitions.json
-**/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/build/
+**/ios/.xcode.env.local
+**/ios/*.xcworkspace/xcuserdata/
+**/ios/*.xcodeproj/xcuserdata/
+**/ios/DerivedData/
 **/*.mobileprovision
 **/*.p12
-
-# ---------------------------------------------------------------------------
-# Desktop targets (used for M0–M7 development)
-# ---------------------------------------------------------------------------
-**/windows/flutter/ephemeral/
-**/linux/flutter/ephemeral/
-**/macos/Flutter/ephemeral/
+*.hmap
+*.ipa
 
 # ---------------------------------------------------------------------------
 # Native build artefacts (shared/dsp, Oboe)
@@ -87,7 +76,6 @@ cmake-build-*/
 *.o
 *.obj
 *.so
-*.dll
 *.dylib
 *.a
 *.lib

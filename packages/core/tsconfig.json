@@ -1,0 +1,44 @@
+{
+  // Compiler settings for the measurement core.
+  //
+  // Two of these are load-bearing architectural constraints, not style choices:
+  //
+  //   "lib":   ["ES2022"]  — no "DOM". `window`, `document`, `fetch` and
+  //                          `setTimeout`-with-DOM-semantics do not exist here.
+  //   "types": []          — no ambient @types at all, so `process`, `Buffer`
+  //                          and `__dirname` do not exist either.
+  //
+  // Together these make "the domain cannot touch a platform" a compile error
+  // rather than a convention. If you find yourself wanting to relax them, the
+  // code in question belongs in app/ as an adapter behind a port.
+  //
+  // Timing note: the core never reads a clock directly. It receives timestamps
+  // through the Clock port, which is what makes a whole synthetic session
+  // reproducible and instant to test.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": [],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "declaration": true,
+    "sourceMap": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts"]
+}
