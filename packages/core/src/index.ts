@@ -32,3 +32,21 @@ export {
 // M1 — the study's constants, versioned and frozen.
 export { PROTOCOL, PROTOCOL_VERSION, protocolToJson } from './domain/protocol/protocol';
 export type { ProtocolConstants } from './domain/protocol/protocol';
+
+// M3 — block C1, the speed tap, plus the descriptive statistics it reports.
+export { SpeedTapRun, defaultSpeedTapConfig } from './domain/blocks/speed-tap';
+export type {
+  Hand,
+  RecordedTap,
+  SpeedTapConfig,
+  SpeedTapPhase,
+  SpeedTapResult,
+  TapRejection,
+} from './domain/blocks/speed-tap';
+export {
+  coefficientOfVariation,
+  interTapIntervals,
+  mean,
+  median,
+  standardDeviation,
+} from './analysis/tap-stats';

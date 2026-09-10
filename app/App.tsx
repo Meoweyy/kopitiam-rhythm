@@ -1,45 +1,39 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
+ * Kopitiam Rhythm — application root.
  *
- * @format
+ * At M3 this mounts a single block, C1. From M5 a session runner sequences the
+ * blocks and this becomes a host that renders whatever the runner asks for.
+ *
+ * The status bar stays dark-on-light regardless of system theme: the whole
+ * instrument is designed around one high-contrast warm palette, and a dark
+ * mode would change the luminance of the cue — which is a stimulus property,
+ * not a preference.
  */
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import React from 'react';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+import { SpeedTapScreen } from './src/screens/SpeedTapScreen';
+import { colours } from './src/ui/theme';
 
+function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
+      {/* Recent React Native drops `backgroundColor` here in favour of
+          edge-to-edge; the ground colour comes from the view below instead. */}
+      <StatusBar barStyle="dark-content" />
+      <SafeAreaView style={styles.root}>
+        <View style={styles.root}>
+          <SpeedTapScreen />
+        </View>
+      </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  root: { flex: 1, backgroundColor: colours.ground },
 });
 
 export default App;
