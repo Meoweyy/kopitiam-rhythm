@@ -2,7 +2,7 @@
 
 exports[`protocol constants > matches the locked snapshot 1`] = `
 "{
-  "version": "v1.0.0",
+  "version": "v1.1.0",
   "tempo": {
     "minMs": 500,
     "maxMs": 900,
@@ -10,7 +10,8 @@ exports[`protocol constants > matches the locked snapshot 1`] = `
   },
   "speedTap": {
     "durationMs": 10000,
-    "handsPerBlock": 2
+    "handsPerBlock": 2,
+    "startTimeoutMs": 20000
   },
   "naturalTempo": {
     "durationMs": 10000

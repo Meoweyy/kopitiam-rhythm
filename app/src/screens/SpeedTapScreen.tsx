@@ -62,6 +62,8 @@ export function SpeedTapScreen(): React.JSX.Element {
   const [handIndex, setHandIndex] = useState(0);
   const [completed, setCompleted] = useState<CompletedRun[]>([]);
   const [tapCount, setTapCount] = useState(0);
+  /** False while armed and waiting for the first tap to open the window. */
+  const [hasStarted, setHasStarted] = useState(false);
   // Annotated because PROTOCOL is `as const`, so the initial value would
   // otherwise narrow the state's type to the literal 10000.
   const [remainingMs, setRemainingMs] = useState<number>(PROTOCOL.speedTap.durationMs);
@@ -79,11 +81,14 @@ export function SpeedTapScreen(): React.JSX.Element {
       const stamps = readTouchTimestamps(event.nativeEvent.timestamp);
 
       const run = new SpeedTapRun(defaultSpeedTapConfig(hand));
-      run.start(stamps.nativeMs);
+      // Armed, not started. The ten seconds begin on the first tap, so the time
+      // spent moving a hand onto the pad never enters the measurement.
+      run.arm(stamps.nativeMs);
 
       runRef.current = run;
       delaysRef.current = [];
       setTapCount(0);
+      setHasStarted(false);
       setRemainingMs(run.config.durationMs);
       setPhase('running');
     },
@@ -102,6 +107,7 @@ export function SpeedTapScreen(): React.JSX.Element {
     // reward the participant with a number going up.
     if (recorded.accepted) {
       setTapCount((count) => count + 1);
+      if (run.windowStartedAtMs === recorded.atMs) setHasStarted(true);
     }
   }, []);
 
@@ -168,7 +174,9 @@ export function SpeedTapScreen(): React.JSX.Element {
     return (
       <View style={styles.screen}>
         <View style={styles.runHeader}>
-          <Text style={styles.countdown}>{(remainingMs / 1000).toFixed(1)}s</Text>
+          <Text style={styles.countdown}>
+            {hasStarted ? `${(remainingMs / 1000).toFixed(1)}s` : 'Ready'}
+          </Text>
           <Text style={styles.tapCount}>{tapCount}</Text>
         </View>
         <View
@@ -176,7 +184,11 @@ export function SpeedTapScreen(): React.JSX.Element {
           onStartShouldSetResponder={() => true}
           onResponderGrant={handlePadTouch}
         >
-          <Text style={styles.padLabel}>Keep tapping</Text>
+          {/* The clock does not start until the first tap lands, so there is no
+              hurry here and the instruction says so. */}
+          <Text style={styles.padLabel}>
+            {hasStarted ? 'Keep tapping' : 'Tap here to begin'}
+          </Text>
         </View>
       </View>
     );

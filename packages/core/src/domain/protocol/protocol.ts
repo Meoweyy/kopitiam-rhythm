@@ -35,8 +35,15 @@
 /**
  * Bumped whenever any value below changes. Recorded on every session row so an
  * analysis can tell which rules produced which data.
+ *
+ * History
+ *  - v1.1.0  Added `speedTap.startTimeoutMs`. C1's window now begins on the
+ *            first tap rather than on the "ready" press, after a run on a real
+ *            tablet showed the hand-positioning gap consuming about a second of
+ *            the ten and under-reporting the rate by 8.5%.
+ *  - v1.0.0  Initial.
  */
-export const PROTOCOL_VERSION = 'v1.0.0';
+export const PROTOCOL_VERSION = 'v1.1.0';
 
 const protocol = {
   version: PROTOCOL_VERSION,
@@ -57,6 +64,15 @@ const protocol = {
   speedTap: {
     durationMs: 10_000,
     handsPerBlock: 2,
+    /**
+     * How long to wait for the first tap after the participant says they are
+     * ready. The window itself starts on that first tap, so the time spent
+     * getting a hand into position never enters the measurement — otherwise a
+     * participant slow to get poised would read as a slow tapper.
+     *
+     * PILOT: generous on purpose. Confirm against the December senior pilot.
+     */
+    startTimeoutMs: 20_000,
   },
 
   /** C2 — comfortable tapping. Sets the tempo every other block runs at. */

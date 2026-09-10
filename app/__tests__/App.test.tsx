@@ -35,7 +35,7 @@ test('a run driven entirely by supplied timestamps produces a result', () => {
   // The same code path the screen uses, exercised with no clock and no device —
   // which is the whole point of the core taking time as an argument.
   const run = new SpeedTapRun(defaultSpeedTapConfig('left'));
-  run.start(0);
+  run.arm(0);
   for (const at of [0, 200, 400, 600, 800]) run.tap(at);
 
   const result = run.result(PROTOCOL.speedTap.durationMs)!;
