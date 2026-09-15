@@ -14,23 +14,35 @@ The check had five parts. Status:
 
 | # | Check | Status |
 |---|---|---|
-| 1 | Touch scan rate of the tablet's digitiser | **BLOCKED — see below** |
+| 1 | Touch scan rate of the tablet's digitiser | **Done (16 Sep)** — ~120 Hz, see §5 |
 | 2 | Whether the tablet supports low-latency audio | **Done** — it does not declare it (§5) |
-| 3 | Does a release APK work standalone (no Metro)? | **Not started** |
-| 4 | Does the app survive backgrounding / screen-off mid-run? | **Not started** |
+| 3 | Does a release APK work standalone (no Metro)? | **Done (16 Sep) — yes.** `assembleRelease` 5m13s, 51.5 MB, signed with the debug keystore (RN template default). Installed with Metro stopped and `adb reverse --remove-all`; C1 played normally |
+| 4 | Does the app survive backgrounding / screen-off mid-run? | **Done (16 Sep) — survives.** Power button pressed ~4 s into a run; the JS timer kept running in the dark and the window closed normally. Process was not killed. **Design consequence:** a trial interrupted this way would look complete but be missing taps — the session runner (M5) must invalidate and restart an interrupted trial from its instructions. Plan already says so; this confirms it is needed, not theoretical |
 | 5 | Full test suite + typecheck | Was green at last run (92 tests) |
 
-**Why #1 is blocked.** The obvious method — `adb shell getevent -t /dev/input/event7` —
-returns nothing. The touch device is `crw-rw---- system:input` and the `shell` user cannot read
-it; the tablet is not rooted. A synthetic `input swipe` would not measure real hardware anyway.
+**Health check complete.** All five parts done; nothing found that changes the plan.
 
-**The right method, not yet done:** measure it *from inside the app*. Capture
-`nativeEvent.timestamp` on touch **move** events during a finger drag; the most common
-inter-event interval is the scan period. Needs no root, and it is what M8's validation suite
-would do anyway. A small diagnostic screen or a dev-only mode on `SpeedTapScreen` would do it.
+**Release-build jitter finding.** The same C1 run on the release build reported delivery jitter
+**1.1 ms** against 3.8–4.4 ms on debug builds (§5, §6). Debug builds carry dev-mode overhead on
+the JS thread. Consequences: (a) the study runs release builds, no exceptions; (b) any timing
+figure that is *reported* must come from a release build — debug numbers are development
+evidence only. **The tablet currently has the release build installed;** the next
+`gradlew assembleDebug && adb install -r` replaces it, and `adb reverse tcp:8081 tcp:8081` must
+be re-run before Metro will work (the tunnel was removed for the standalone test).
 
-**The very last command** (checking `adb shell id` and `dumpsys input`) failed with a tool
-permission error before it ran — nothing was learned from it.
+**How #1 was measured (16 Sep).** `adb shell getevent` is blocked — the touch device is
+`crw-rw---- system:input` and the `shell` user cannot read it; the tablet is not rooted. What
+works instead: `adb shell dumpsys input` prints the InputDispatcher's `RecentQueue`, the last
+ten events with their age in whole milliseconds. Drag a finger, lift, run the command, and the
+differences between ages are the raw inter-report intervals from the touch panel — before any
+batching. Two drags gave `8 8 8 9 8 16 9 16 83` and `9 8 8 8 17 8 25 25 66`: a base period of
+~8.3 ms with occasional skipped reports (multiples of 8) as the finger slows, and the long
+final gap is the lift. **~120 Hz.**
+
+**Do not measure this from inside the app via React Native.** Android batches `ACTION_MOVE`
+samples and delivers one `MotionEvent` per vsync; RN exposes only `getEventTime()` of the
+latest sample, not `getHistoricalEventTime()`. An in-app move-interval histogram would report
+the 60 Hz display rate, not the digitiser rate. Reading history requires native code — M8.
 
 Metro was running in the background and has since stopped. Restart per `CLAUDE.md`.
 
@@ -45,7 +57,8 @@ Metro was running in the background and has since stopped. Restart per `CLAUDE.m
 - **10 Sep** — Android toolchain installed. Tablet connected. **M2 deliberately skipped** (see §8)
   to get something on screen sooner. M3 built and run on the tablet (`ca097e4`). User's own
   tapping data exposed a bug in C1; fixed (`57cea90`). Health check started, then paused.
-- **16 Sep** — This handoff.
+- **16 Sep** — This handoff. Later the same day: touch scan rate measured (§1, §5). User put
+  **M4 (C2) on hold** and chose to build the kettle game (R1) next, visual first, audio after.
 
 ---
 
@@ -155,10 +168,10 @@ MediaTek Helio P22T. The user owns it; whether it becomes the *study* device is 
 | `aaudio.mmap_policy` property | **absent** | Strongest hint that Oboe may not get an exclusive MMAP stream at M9 → `getTimestamp` may be unavailable → degradation path (variability endpoints OK, calibrated asynchrony not) |
 | **3.5 mm headphone jack** | **present** (`mt-snd-card Headset Jack`) | Excellent for M10: electrical loopback test possible without USB adapter |
 | Touch panel | `/dev/input/event7` "mtk-tpd" | Owned `system:input` 660 — shell cannot read raw events |
-| Touch scan rate | **UNMEASURED** | The single most important unknown. Measure in-app (§1) |
+| Touch scan rate | **~120 Hz** (8.3 ms period; two drags, 18 intervals, via `dumpsys input` RecentQueue — §1) | Tap quantisation ≤8 ms, uniform → ~2.4 ms SD on a raw tap, ~3.4 ms on an interval. Small next to a 25–35 ms behavioural SD. **Caveat:** 18 intervals from finger drags; whether the panel ever idles to a lower rate, and the rate under a *tap* rather than a drag, are confirmed by V5 at M8 |
 
 **Delivery jitter** (SD of touch-to-JS delay, measured by the app): **4.4 ms** and **3.8 ms**
-across two runs. Stable. Interval noise contribution √2×3.8 ≈ 5.4 ms → ~2–3% inflation of a
+across two debug-build runs; **1.1 ms** on a release build (§1). Stable within a build type. Interval noise contribution √2×3.8 ≈ 5.4 ms → ~2–3% inflation of a
 25–35 ms SD *if* it reached the data, and it mostly does not because taps use kernel timestamps.
 **Conclusion drawn: M8's native hook is worth building for defensibility (you cannot report what
 you cannot measure) more than for magnitude.**
@@ -167,15 +180,19 @@ you cannot measure) more than for magnitude.**
 
 ## 6. The user's own C1 results
 
-| | Run 1 (before fix) | Run 2 (after fix) |
-|---|---|---|
-| Taps | 61 | 68 |
-| Rate | 6.1/s | 6.8/s |
-| Mean gap | 150 ms | 148 ms |
-| SD | 25.4 ms | 15.7 ms |
-| CV | 16.9% | 10.6% |
-| Debounced | 1 | 0 |
-| Jitter | 4.4 ms | 3.8 ms |
+| | Run 1 (before fix) | Run 2 (after fix) | Run 3 (release build, 16 Sep) |
+|---|---|---|---|
+| Taps | 61 | 68 | 68 |
+| Rate | 6.1/s | 6.8/s | 6.8/s |
+| Mean gap | 150 ms | 148 ms | 148 ms |
+| SD | 25.4 ms | 15.7 ms | 12.3 ms |
+| CV | 16.9% | 10.6% | 8.3% |
+| Debounced | 1 | 0 | — |
+| Jitter | 4.4 ms | 3.8 ms | 1.1 ms |
+
+Run 3's rate and mean gap are identical to run 2 — the user's sustained rate is stable at
+~6.8/s. The further SD drop (15.7 → 12.3) is again **not attributable**: practice and the lower
+release-build jitter changed together.
 
 Run 2's rate matches the sustained rate (1000/148 = 6.76/s) — the fix worked. The SD drop is
 **not** cleanly attributable: practice, the fix, and the absence of a dropped tap all changed at
@@ -231,7 +248,6 @@ port abstractions and the synthetic tapper still need to be built — probably a
 ## 10. Known issues and debt
 
 - **No GitHub remote.** User must create a private repo; then `git remote add origin ... && git push -u origin main`.
-- **Touch scan rate unmeasured** (§1).
 - **No outlier handling** — SDs fragile to a single dropped tap until M13.
 - **touch-clock.ts is provisional** — single-sample offset; absolute delay meaningless. Replaced at M8.
 - **Stale Flutter on PATH** — harmless, deletable.
@@ -243,16 +259,19 @@ port abstractions and the synthetic tapper still need to be built — probably a
 
 ## 11. What is next
 
-**Immediate:** finish the health check (§1) — especially the in-app touch scan rate, and a
-standalone release build (`cd app/android && ./gradlew assembleRelease`, install, run with
-Metro *stopped*).
+**Health check is complete (§1).** Nothing found that changes the plan.
 
-**Then M4 — C2 natural tempo.** Ten seconds tapping at a comfortable pace. Median ITI clamped
-to 500–900 ms, **locked at session 1 and never recomputed**. Every later block runs at it.
-Reuses C1's structure almost entirely. ~half a day.
+**Then the kettle game (R1), by the user's decision on 16 Sep — M4 (C2) is on hold.**
+Two stages: (1) visual only — the table turns, cups reach the kettle, tap when they arrive, at
+a fixed placeholder tempo (~700 ms) since C2 does not exist yet; (2) then audio (M9). Rationale:
+R1 is the study; building it concretely shows what a beat schedule and a scored tap actually
+need before `Block` (M5) and persistence (M6) are designed around them. This means three
+concrete blocks may exist before the `Block` interface is extracted — that is within the
+"extract, don't guess" rule, not against it.
 
-**Then M5 — extract `Block`.** Now that C1 and C2 both exist. Also the right moment to build
-the deferred ports + fakes + `SyntheticTapper` from M2.
+**Still to do, in whatever order fits:** M4 (C2 natural tempo — half a day, reuses C1's
+structure; the placeholder tempo in R1 becomes the locked C2 value), M5 (extract `Block`, plus
+the deferred M2 ports + fakes + `SyntheticTapper`), M6–M7 persistence and export.
 
 Full sequence in `docs/PLAN.md`.
 
