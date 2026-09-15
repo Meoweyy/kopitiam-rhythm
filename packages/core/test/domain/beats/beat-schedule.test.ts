@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  beatPositionAt,
   beatTimeAt,
   buildBeatSchedule,
   type BeatScheduleConfig,
@@ -114,5 +115,28 @@ describe('beatTimeAt', () => {
     const next = beatTimeAt(config.startAtMs, config.ioiMs, config.beatCount);
 
     expect(next - beats[beats.length - 1]!.atMs).toBe(config.ioiMs);
+  });
+});
+
+describe('beatPositionAt', () => {
+  it('is zero at the start and one beat per tempo thereafter', () => {
+    expect(beatPositionAt(10_000, 700, 10_000)).toBe(0);
+    expect(beatPositionAt(10_000, 700, 10_700)).toBe(1);
+    expect(beatPositionAt(10_000, 700, 10_000 + 3 * 700)).toBe(3);
+  });
+
+  it('is fractional between beats', () => {
+    expect(beatPositionAt(10_000, 700, 10_350)).toBeCloseTo(0.5, 12);
+    expect(beatPositionAt(10_000, 700, 10_000 + 3.25 * 700)).toBeCloseTo(3.25, 12);
+  });
+
+  it('is negative before the first beat', () => {
+    expect(beatPositionAt(10_000, 700, 9_300)).toBe(-1);
+  });
+
+  it('inverts beatTimeAt for every beat of a schedule', () => {
+    for (const beat of buildBeatSchedule(config)) {
+      expect(beatPositionAt(config.startAtMs, config.ioiMs, beat.atMs)).toBe(beat.index);
+    }
   });
 });

@@ -52,7 +52,7 @@ export {
 } from './analysis/tap-stats';
 
 // R1, piece 1 — the beat grid every paced block is scored against.
-export { beatTimeAt, buildBeatSchedule } from './domain/beats/beat-schedule';
+export { beatPositionAt, beatTimeAt, buildBeatSchedule } from './domain/beats/beat-schedule';
 export type { Beat, BeatScheduleConfig } from './domain/beats/beat-schedule';
 
 // R1, piece 2 — matching taps to beats (shared by the game and the analysis),

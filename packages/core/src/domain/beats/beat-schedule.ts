@@ -95,3 +95,17 @@ export function buildBeatSchedule(config: BeatScheduleConfig): readonly Beat[] {
 export function beatTimeAt(startAtMs: number, ioiMs: number, index: number): number {
   return startAtMs + index * ioiMs;
 }
+
+/**
+ * The inverse: how far along the grid "now" is, in beats, as a real number.
+ *
+ * 3.25 means a quarter of the way from beat 3 to beat 4; negative values are
+ * before beat zero. This is what a visual presenter reads to place the cups:
+ * the table's angle is a function of this number and nothing else, so the
+ * picture is derived from the same clock the taps are stamped with and cannot
+ * drift away from the beats the way an animation running on its own timer
+ * would.
+ */
+export function beatPositionAt(startAtMs: number, ioiMs: number, nowMs: number): number {
+  return (nowMs - startAtMs) / ioiMs;
+}

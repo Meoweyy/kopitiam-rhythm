@@ -23,13 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type GestureResponderEvent,
-} from 'react-native';
+import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 
 import {
   PROTOCOL,
@@ -40,6 +34,7 @@ import {
   type SpeedTapResult,
 } from '@kopitiam/core';
 
+import { BigButton, Row, Screen, textStyles } from '../ui/controls';
 import { colours, layout, type } from '../ui/theme';
 import { nativeNow, readTouchTimestamps } from '../timing/touch-clock';
 
@@ -57,7 +52,7 @@ interface CompletedRun {
   readonly deliveryJitterMs: number | null;
 }
 
-export function SpeedTapScreen(): React.JSX.Element {
+export function SpeedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('intro');
   const [handIndex, setHandIndex] = useState(0);
   const [completed, setCompleted] = useState<CompletedRun[]>([]);
@@ -156,16 +151,17 @@ export function SpeedTapScreen(): React.JSX.Element {
   if (phase === 'intro') {
     return (
       <Screen>
-        <Text style={styles.headline}>
+        <Text style={textStyles.headline}>
           {hand === 'left' ? 'Left hand' : 'Right hand'}
         </Text>
-        <Text style={styles.body}>
+        <Text style={textStyles.body}>
           When you are ready, tap the big square as fast as you can.
         </Text>
-        <Text style={styles.bodyMuted}>
+        <Text style={textStyles.bodyMuted}>
           It lasts {PROTOCOL.speedTap.durationMs / 1000} seconds.
         </Text>
         <BigButton label="I'm ready" onTouch={beginRun} />
+        {onExit ? <BigButton label="Menu" onPress={onExit} /> : null}
       </Screen>
     );
   }
@@ -198,7 +194,7 @@ export function SpeedTapScreen(): React.JSX.Element {
     const last = completed[completed.length - 1];
     return (
       <Screen>
-        <Text style={styles.headline}>
+        <Text style={textStyles.headline}>
           {last?.result.hand === 'left' ? 'Left hand' : 'Right hand'}
         </Text>
         {last ? <ResultTable run={last} /> : null}
@@ -212,16 +208,17 @@ export function SpeedTapScreen(): React.JSX.Element {
 
   return (
     <Screen>
-      <Text style={styles.headline}>Both hands done</Text>
+      <Text style={textStyles.headline}>Both hands done</Text>
       {completed.map((run) => (
         <View key={run.result.hand} style={styles.summaryBlock}>
-          <Text style={styles.title}>
+          <Text style={textStyles.title}>
             {run.result.hand === 'left' ? 'Left' : 'Right'}
           </Text>
           <ResultTable run={run} />
         </View>
       ))}
       <BigButton label="Run again" onPress={restart} />
+      {onExit ? <BigButton label="Menu" onPress={onExit} /> : null}
     </Screen>
   );
 }
@@ -260,48 +257,6 @@ function ResultTable({ run }: { run: CompletedRun }): React.JSX.Element {
   );
 }
 
-function Row({
-  label,
-  value,
-  muted = false,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-}): React.JSX.Element {
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.rowLabel, muted && styles.mutedText]}>{label}</Text>
-      <Text style={[styles.rowValue, muted && styles.mutedText]}>{value}</Text>
-    </View>
-  );
-}
-
-function Screen({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <View style={styles.screen}>{children}</View>;
-}
-
-function BigButton({
-  label,
-  onPress,
-  onTouch,
-}: {
-  label: string;
-  onPress?: () => void;
-  onTouch?: (event: GestureResponderEvent) => void;
-}): React.JSX.Element {
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-      onPressIn={onTouch}
-      onPress={onPress}
-      accessibilityRole="button"
-    >
-      <Text style={styles.buttonLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -311,16 +266,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: layout.gutter,
   },
-  headline: {
-    fontSize: type.headline,
-    fontWeight: '600',
-    color: colours.ink,
-    textAlign: 'center',
-  },
-  title: { fontSize: type.title, fontWeight: '600', color: colours.ink },
-  body: { fontSize: type.body, color: colours.ink, textAlign: 'center' },
-  bodyMuted: { fontSize: type.small, color: colours.inkMuted, textAlign: 'center' },
-  mutedText: { color: colours.inkMuted },
 
   runHeader: {
     flexDirection: 'row',
@@ -356,25 +301,4 @@ const styles = StyleSheet.create({
 
   table: { alignSelf: 'stretch', paddingHorizontal: layout.gutter, gap: 8 },
   summaryBlock: { alignSelf: 'stretch', gap: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  rowLabel: { fontSize: type.small, color: colours.ink },
-  rowValue: {
-    fontSize: type.body,
-    fontWeight: '600',
-    color: colours.ink,
-    fontVariant: ['tabular-nums'],
-  },
-
-  button: {
-    minHeight: layout.minTouch,
-    minWidth: 240,
-    paddingHorizontal: 40,
-    paddingVertical: 20,
-    borderRadius: layout.radius,
-    backgroundColor: colours.amber,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonPressed: { backgroundColor: colours.amberBright },
-  buttonLabel: { fontSize: type.body, fontWeight: '600', color: colours.ground },
 });
