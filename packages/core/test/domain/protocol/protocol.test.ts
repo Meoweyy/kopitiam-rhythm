@@ -85,6 +85,19 @@ describe('protocol constants', () => {
       );
     });
 
+    it('flashes for well under a beat at the fastest tempo, so flashes never merge', () => {
+      expect(PROTOCOL.cue.visualFlashMs).toBeLessThan(PROTOCOL.tempo.minMs / 2);
+    });
+
+    it('keeps the trial grace at least as long as the widest matching window', () => {
+      // A late-but-matchable response to the last beat must fall inside the
+      // grace period, or it would be rejected as after the window. The widest
+      // window is at the slowest tempo.
+      expect(PROTOCOL.session.trialGraceMs).toBeGreaterThanOrEqual(
+        PROTOCOL.matching.windowFraction * PROTOCOL.tempo.maxMs,
+      );
+    });
+
     it('keeps the step-up threshold below the step-down threshold', () => {
       // If these crossed, the controller could qualify to step up and down on
       // the same trial, and the ladder would oscillate.

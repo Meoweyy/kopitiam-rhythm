@@ -23,10 +23,12 @@ test('mounts with an injected clock and lays out one cup per beat of a turn', as
       <TurningTable
         startAtMs={10_000}
         ioiMs={700}
+        beatCount={12}
         side="right"
         clock={clock}
         turning={false}
         cupCount={6}
+        flashMs={150}
       />,
     );
   });
@@ -41,10 +43,12 @@ test('mounts with an injected clock and lays out one cup per beat of a turn', as
       <TurningTable
         startAtMs={10_000}
         ioiMs={700}
+        beatCount={12}
         side="right"
         clock={clock}
         turning={false}
         cupCount={6}
+        flashMs={150}
       />,
     );
   });

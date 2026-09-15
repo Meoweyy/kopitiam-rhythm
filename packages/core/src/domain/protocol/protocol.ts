@@ -37,13 +37,16 @@
  * analysis can tell which rules produced which data.
  *
  * History
+ *  - v1.2.0  Added `cue` — the visual pacing cue's stimulus properties (cups
+ *            on the table, flash length), as R1's presenter was built. Both
+ *            PILOT.
  *  - v1.1.0  Added `speedTap.startTimeoutMs`. C1's window now begins on the
  *            first tap rather than on the "ready" press, after a run on a real
  *            tablet showed the hand-positioning gap consuming about a second of
  *            the ten and under-reporting the rate by 8.5%.
  *  - v1.0.0  Initial.
  */
-export const PROTOCOL_VERSION = 'v1.1.0';
+export const PROTOCOL_VERSION = 'v1.2.0';
 
 const protocol = {
   version: PROTOCOL_VERSION,
@@ -78,6 +81,27 @@ const protocol = {
   /** C2 — comfortable tapping. Sets the tempo every other block runs at. */
   naturalTempo: {
     durationMs: 10_000,
+  },
+
+  /**
+   * The visual pacing cue: the turning table. These are stimulus properties,
+   * not decoration — they shape what the participant sees approaching and how
+   * salient the beat itself is — so they are versioned here rather than left
+   * as literals in the drawing code.
+   */
+  cue: {
+    /**
+     * Cups on the rim. One arrives at the kettle per beat, so this sets how
+     * far the table turns per beat and therefore how fast a cup is seen to
+     * approach. PILOT.
+     */
+    cupsOnTable: 8,
+    /**
+     * How long the kettle stays lit after a cup arrives, fading linearly.
+     * Short enough to read as an event rather than a state, and well under
+     * the fastest tempo so consecutive flashes never merge. PILOT.
+     */
+    visualFlashMs: 150,
   },
 
   /**

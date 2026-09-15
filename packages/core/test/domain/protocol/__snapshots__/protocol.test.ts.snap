@@ -2,7 +2,7 @@
 
 exports[`protocol constants > matches the locked snapshot 1`] = `
 "{
-  "version": "v1.1.0",
+  "version": "v1.2.0",
   "tempo": {
     "minMs": 500,
     "maxMs": 900,
@@ -15,6 +15,10 @@ exports[`protocol constants > matches the locked snapshot 1`] = `
   },
   "naturalTempo": {
     "durationMs": 10000
+  },
+  "cue": {
+    "cupsOnTable": 8,
+    "visualFlashMs": 150
   },
   "patterns": {
     "startLength": 3,

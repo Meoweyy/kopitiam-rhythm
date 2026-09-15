@@ -118,9 +118,12 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
           <TurningTable
             startAtMs={startAtMs}
             ioiMs={PLACEHOLDER_TEMPO_MS}
+            beatCount={PLACEHOLDER_BEAT_COUNT}
             side={PLACEHOLDER_SIDE}
             clock={nativeNow}
             turning
+            cupCount={PROTOCOL.cue.cupsOnTable}
+            flashMs={PROTOCOL.cue.visualFlashMs}
             size={280}
           />
         </View>

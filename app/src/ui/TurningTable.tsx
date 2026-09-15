@@ -34,6 +34,12 @@ export interface TurningTableProps {
   /** When beat zero falls, in the clock's base. */
   readonly startAtMs: number;
   readonly ioiMs: number;
+  /**
+   * How many beats the trial has. The table stops when the last cup arrives,
+   * so no cup ever reaches the kettle without a scheduled beat behind it —
+   * a cue with no beat would invite a tap the trial cannot score.
+   */
+  readonly beatCount: number;
   /** Which side the kettle sits on; cups arrive there. */
   readonly side: Hand;
   /** Reads "now" in the same base as `startAtMs`. */
@@ -41,7 +47,9 @@ export interface TurningTableProps {
   /** Keeps the table turning while true; freezes it in place otherwise. */
   readonly turning: boolean;
   /** Cups around the rim. One arrives per beat, so a full turn is this many beats. */
-  readonly cupCount?: number;
+  readonly cupCount: number;
+  /** How long the kettle stays lit after a cup arrives, fading linearly. */
+  readonly flashMs: number;
   /** Diameter, in dp. */
   readonly size?: number;
 }
@@ -52,26 +60,46 @@ const KETTLE_ANGLE: Record<Hand, number> = { left: 270, right: 90 };
 export function TurningTable({
   startAtMs,
   ioiMs,
+  beatCount,
   side,
   clock,
   turning,
-  cupCount = 8,
+  cupCount,
+  flashMs,
   size = 320,
 }: TurningTableProps): React.JSX.Element {
   const stepDeg = 360 / cupCount;
   const rotationDeg = useRef(new Animated.Value(0)).current;
+  const kettleGlow = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!turning) return undefined;
 
     let frame = 0;
     const tick = (): void => {
-      rotationDeg.setValue(beatPositionAt(startAtMs, ioiMs, clock()) * stepDeg);
+      const position = beatPositionAt(startAtMs, ioiMs, clock());
+
+      // The table turns until the last cup is at the kettle, then holds.
+      rotationDeg.setValue(Math.min(position, beatCount - 1) * stepDeg);
+
+      // The kettle lights on each scheduled beat and fades over flashMs. Both
+      // the timing and the fade are read from the clock, so a dropped frame
+      // shortens the flash rather than delaying it.
+      //
+      // Known limit of a visual cue: the flash is drawn on the first frame
+      // after the beat, up to one display refresh (~17 ms at 60 Hz) late. The
+      // scheduled time is what taps are scored against; the audible cue at M9
+      // is the precise one.
+      const beatIndex = Math.floor(position);
+      const sinceBeatMs = (position - beatIndex) * ioiMs;
+      const onScheduledBeat = beatIndex >= 0 && beatIndex < beatCount;
+      kettleGlow.setValue(onScheduledBeat ? Math.max(0, 1 - sinceBeatMs / flashMs) : 0);
+
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [turning, startAtMs, ioiMs, clock, stepDeg, rotationDeg]);
+  }, [turning, startAtMs, ioiMs, beatCount, clock, stepDeg, flashMs, rotationDeg, kettleGlow]);
 
   const geometry = useMemo(() => tableGeometry(size), [size]);
   const kettleAngle = KETTLE_ANGLE[side];
@@ -138,7 +166,8 @@ export function TurningTable({
         />
       </Animated.View>
 
-      {/* The kettle does not turn with the table. */}
+      {/* The kettle does not turn with the table. Its glow is a bright layer
+          whose opacity follows the clock-driven fade. */}
       <View
         style={[
           styles.kettle,
@@ -150,7 +179,14 @@ export function TurningTable({
             top: kettle.y - geometry.kettleSize / 2,
           },
         ]}
-      />
+      >
+        <Animated.View
+          style={[
+            styles.kettleGlow,
+            { borderRadius: geometry.kettleSize / 4, opacity: kettleGlow },
+          ]}
+        />
+      </View>
     </View>
   );
 }
@@ -202,5 +238,14 @@ const styles = StyleSheet.create({
   kettle: {
     position: 'absolute',
     backgroundColor: colours.ink,
+    overflow: 'hidden',
+  },
+  kettleGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colours.amberBright,
   },
 });
