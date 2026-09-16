@@ -26,13 +26,14 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { Animated, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 
 import {
   PROTOCOL,
   PacedTapRun,
   buildBeatSchedule,
   defaultPacedTapConfig,
+  matchTapsToBeats,
   type Hand,
   type PacedTapResult,
 } from '@kopitiam/core';
@@ -51,11 +52,17 @@ const PLACEHOLDER_SIDE: Hand = 'right';
 
 type Phase = 'intro' | 'running' | 'done';
 
+/** How long the bloom takes to fade. Feedback, not measurement, so an animation timer is fine. */
+const BLOOM_FADE_MS = 250;
+
 export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('intro');
   const [, setResult] = useState<PacedTapResult | null>(null);
 
   const runRef = useRef<PacedTapRun | null>(null);
+  /** Touch-to-JS delay per tap, for the diagnostic on the results view. */
+  const delaysRef = useRef<number[]>([]);
+  const bloom = useRef(new Animated.Value(0)).current;
   const [startAtMs, setStartAtMs] = useState(0);
 
   const beginRun = useCallback((event: GestureResponderEvent) => {
@@ -72,11 +79,42 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
       side: PLACEHOLDER_SIDE,
     });
     runRef.current = new PacedTapRun(defaultPacedTapConfig(beats, PLACEHOLDER_TEMPO_MS));
+    delaysRef.current = [];
 
     setStartAtMs(firstBeatAtMs);
     setResult(null);
     setPhase('running');
   }, []);
+
+  const handlePadTouch = useCallback(
+    (event: GestureResponderEvent) => {
+      const run = runRef.current;
+      if (run === null) return;
+
+      const stamps = readTouchTimestamps(event.nativeEvent.timestamp);
+      const recorded = run.tap(stamps.nativeMs, PLACEHOLDER_SIDE);
+      delaysRef.current.push(stamps.deliveryDelayMs);
+
+      // Feedback is one-directional: a tap near a beat blooms, anything else
+      // produces nothing at all. "Near" is decided by the same matcher that
+      // scores the trial, so the bloom can never disagree with the data.
+      if (!recorded.accepted) return;
+      const near = matchTapsToBeats(
+        run.config.beats.map((b) => b.atMs),
+        [recorded.atMs],
+        run.config.matchWindowMs,
+      );
+      if (near.matches.length === 0) return;
+
+      bloom.setValue(1);
+      Animated.timing(bloom, {
+        toValue: 0,
+        duration: BLOOM_FADE_MS,
+        useNativeDriver: true,
+      }).start();
+    },
+    [bloom],
+  );
 
   // Watches for the end of the trial. 50 ms is a display cadence; the trial
   // boundary itself is decided by comparing timestamps inside the core.
@@ -128,7 +166,16 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
           />
         </View>
         <View style={styles.padArea}>
-          <Text style={textStyles.bodyMuted}>(pad arrives in piece 6)</Text>
+          <View
+            style={[
+              styles.pad,
+              PLACEHOLDER_SIDE === 'left' ? styles.padLeft : styles.padRight,
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderGrant={handlePadTouch}
+          >
+            <Animated.View style={[styles.bloom, { opacity: bloom }]} pointerEvents="none" />
+          </View>
         </View>
       </View>
     );
@@ -155,8 +202,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   padArea: {
-    height: 160,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 180,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  pad: {
+    flex: 1,
+    borderRadius: layout.radius,
+    backgroundColor: colours.amberSoft,
+    borderWidth: 4,
+    borderColor: colours.amber,
+    overflow: 'hidden',
+  },
+  // The pad sits under the kettle's side, so the participant is not reaching
+  // across the tablet.
+  padLeft: { marginRight: '50%' },
+  padRight: { marginLeft: '50%' },
+  bloom: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colours.amberBright,
   },
 });
