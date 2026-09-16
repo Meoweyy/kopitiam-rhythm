@@ -101,7 +101,66 @@ export function fitClockMap(anchors: readonly ClockAnchor[]): ClockMap | null {
   };
 }
 
+/**
+ * A map with the slope fixed at a known sample rate, fitting only the offset.
+ *
+ * ## Why this is the one a trial freezes
+ *
+ * A trial has to place its beats before the first click sounds, from the
+ * handful of anchors available ~120 ms after `play()`. Fitting a slope from
+ * five points 80 ms apart and extrapolating 1.4 s to beat zero magnifies
+ * their noise: measured at 0.33 ms on the A7 Lite. But the slope is not
+ * unknown — it is the device's sample rate, measured across whole tracks at
+ * 48 000 ± 0.2 Hz. Fixing it turns the extrapolation error into microseconds,
+ * and the offset is the median of the anchors' individual estimates, which a
+ * single bad read cannot pull.
+ *
+ * `fitClockMap` (free slope) is still run at the end of every trial: its
+ * implied rate is the watchdog that would catch a device opening at the
+ * wrong rate, or the assumed rate drifting from the truth.
+ */
+export function fitClockOffset(
+  anchors: readonly ClockAnchor[],
+  sampleRate: number,
+): ClockMap | null {
+  if (anchors.length === 0) return null;
+  if (!(sampleRate > 0) || !Number.isFinite(sampleRate)) {
+    throw new RangeError(`sampleRate must be positive and finite, got ${sampleRate}`);
+  }
+
+  const nsPerFrame = 1e9 / sampleRate;
+  const offsets = anchors.map((a) => a.nanoTime - a.framePosition * nsPerFrame).sort((x, y) => x - y);
+  const mid = Math.floor(offsets.length / 2);
+  const nanoTimeAtFrameZero =
+    offsets.length % 2 === 1 ? offsets[mid]! : (offsets[mid - 1]! + offsets[mid]!) / 2;
+
+  let residualSdMs: number | null = null;
+  if (anchors.length >= 2) {
+    let sumSquares = 0;
+    for (const o of offsets) sumSquares += (o - nanoTimeAtFrameZero) ** 2;
+    // n − 1: one parameter was estimated.
+    residualSdMs = Math.sqrt(sumSquares / (anchors.length - 1)) / 1e6;
+  }
+
+  return {
+    nsPerFrame,
+    nanoTimeAtFrameZero,
+    impliedSampleRate: sampleRate,
+    residualSdMs,
+    anchorCount: anchors.length,
+  };
+}
+
 /** The time, in nanoTime, at which `framePosition` is presented, under `map`. */
 export function nanoTimeOfFrame(map: ClockMap, framePosition: number): number {
   return map.nanoTimeAtFrameZero + map.nsPerFrame * framePosition;
+}
+
+/**
+ * The same, in the touch clock's units: `SystemClock.uptimeMillis()`, which
+ * is `System.nanoTime() / 1e6` on the same CLOCK_MONOTONIC base (touch
+ * events truncate to whole milliseconds; this does not).
+ */
+export function uptimeMsOfFrame(map: ClockMap, framePosition: number): number {
+  return nanoTimeOfFrame(map, framePosition) / 1e6;
 }

@@ -69,5 +69,5 @@ export type {
 } from './domain/blocks/paced-tap';
 
 // M9 / S1 — the audio clock map: frame position ↔ monotonic time.
-export { fitClockMap, nanoTimeOfFrame } from './analysis/clock-map';
+export { fitClockMap, fitClockOffset, nanoTimeOfFrame, uptimeMsOfFrame } from './analysis/clock-map';
 export type { ClockAnchor, ClockMap } from './analysis/clock-map';

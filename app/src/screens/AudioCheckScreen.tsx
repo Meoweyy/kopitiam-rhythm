@@ -19,7 +19,7 @@
 import React, { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { PROTOCOL, fitClockMap, type ClockMap } from '@kopitiam/core';
+import { PROTOCOL, fitClockMap, fitClockOffset, uptimeMsOfFrame, type ClockMap } from '@kopitiam/core';
 
 import NativeAudioEngine, {
   type AudioReadout,
@@ -41,7 +41,11 @@ type State =
       readonly kind: 'track-done';
       readonly start: ClickTrackStart;
       readonly end: ClickTrackEnd;
-      readonly warmupMap: ClockMap | null;
+      /** Free slope from the warm-up anchors — what S2 did. For comparison. */
+      readonly warmupFreeMap: ClockMap | null;
+      /** Fixed slope, offset from the warm-up anchors — what a trial freezes (S3). */
+      readonly warmupFixedMap: ClockMap | null;
+      /** Free slope from every anchor — the watchdog. */
       readonly fullMap: ClockMap | null;
     }
   | { readonly kind: 'failed'; readonly message: string };
@@ -78,7 +82,8 @@ export function AudioCheckScreen({ onExit }: { onExit?: () => void }): React.JSX
         kind: 'track-done',
         start,
         end,
-        warmupMap: fitClockMap(start.anchors),
+        warmupFreeMap: fitClockMap(start.anchors),
+        warmupFixedMap: fitClockOffset(start.anchors, start.sampleRate),
         fullMap: fitClockMap(end.anchors),
       });
     } catch (error) {
@@ -118,27 +123,31 @@ export function AudioCheckScreen({ onExit }: { onExit?: () => void }): React.JSX
 }
 
 /**
- * The track report. Two clock maps are shown side by side on purpose: the
- * warm-up map is what a trial will have to work from when it places the beats
- * (S3/S4), the full map is the best available after the fact. How much they
- * disagree is the cost of freezing early.
+ * The track report. Three clock maps are compared on purpose: the two
+ * warm-up maps are what a trial has to work from when it places the beats,
+ * and the full map is the best available after the fact. How much each
+ * warm-up map disagrees with the full one is the cost of freezing early —
+ * and the fixed-slope map exists because that cost was 0.33 ms with a free
+ * slope on this device (S2).
  */
 function TrackTable({
   state,
 }: {
   state: Extract<State, { kind: 'track-done' }>;
 }): React.JSX.Element {
-  const { start, end, warmupMap, fullMap } = state;
+  const { start, end, warmupFreeMap, warmupFixedMap, fullMap } = state;
   const durationMs = (start.totalFrames / start.sampleRate) * 1000;
   const firstClickMs = (start.clickFrames[0]! / start.sampleRate) * 1000;
   const lastClickMs = (start.clickFrames[start.clickFrames.length - 1]! / start.sampleRate) * 1000;
 
-  // Where the maps put the first click on the tap clock, in ms. The
-  // difference is the early-freeze cost.
+  // Where each map puts the first click on the tap clock, in ms.
   const firstClickOn = (map: ClockMap | null): number | null =>
-    map === null ? null : (map.nanoTimeAtFrameZero + map.nsPerFrame * start.clickFrames[0]!) / 1e6;
-  const warmupFirst = firstClickOn(warmupMap);
+    map === null ? null : uptimeMsOfFrame(map, start.clickFrames[0]!);
   const fullFirst = firstClickOn(fullMap);
+  const costOf = (map: ClockMap | null): string => {
+    const first = firstClickOn(map);
+    return first === null || fullFirst === null ? '—' : `${(first - fullFirst).toFixed(3)} ms`;
+  };
 
   return (
     <View style={styles.table}>
@@ -159,15 +168,8 @@ function TrackTable({
             : `${fullMap.residualSdMs.toFixed(3)} ms`
         }
       />
-      <Row
-        label="Warm-up vs full"
-        value={
-          warmupFirst === null || fullFirst === null
-            ? '—'
-            : `${(warmupFirst - fullFirst).toFixed(3)} ms on click 0`
-        }
-        muted
-      />
+      <Row label="Early freeze, free slope" value={`${costOf(warmupFreeMap)} on click 0`} muted />
+      <Row label="Early freeze, fixed slope" value={`${costOf(warmupFixedMap)} on click 0`} />
       <Row
         label="Play → first anchor"
         value={
