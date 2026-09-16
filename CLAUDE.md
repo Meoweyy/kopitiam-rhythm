@@ -91,7 +91,6 @@ them. `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` and PATH entries for platf
 
 - Multi-paragraph messages explaining *why*, written to a temp file and committed with `-F`
   (PowerShell here-strings do not pipe into git correctly).
-- End with `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - Commit only when the user asks or a milestone is done. Never push without asking.
 
 ## Working with this user
