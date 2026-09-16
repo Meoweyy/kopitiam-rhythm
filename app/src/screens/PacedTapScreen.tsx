@@ -34,11 +34,13 @@ import {
   buildBeatSchedule,
   defaultPacedTapConfig,
   matchTapsToBeats,
+  standardDeviation,
   type Hand,
+  type PacedTapRejection,
   type PacedTapResult,
 } from '@kopitiam/core';
 
-import { BigButton, Screen, textStyles } from '../ui/controls';
+import { BigButton, Row, Screen, textStyles } from '../ui/controls';
 import { colours, layout } from '../ui/theme';
 import { TurningTable } from '../ui/TurningTable';
 import { nativeNow, readTouchTimestamps } from '../timing/touch-clock';
@@ -55,9 +57,15 @@ type Phase = 'intro' | 'running' | 'done';
 /** How long the bloom takes to fade. Feedback, not measurement, so an animation timer is fine. */
 const BLOOM_FADE_MS = 250;
 
+interface CompletedTrial {
+  readonly result: PacedTapResult;
+  /** Spread of the touch-to-JS delay. Diagnostic only; see SpeedTapScreen for why spread, not size. */
+  readonly deliveryJitterMs: number | null;
+}
+
 export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('intro');
-  const [, setResult] = useState<PacedTapResult | null>(null);
+  const [completed, setCompleted] = useState<CompletedTrial | null>(null);
 
   const runRef = useRef<PacedTapRun | null>(null);
   /** Touch-to-JS delay per tap, for the diagnostic on the results view. */
@@ -82,7 +90,7 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
     delaysRef.current = [];
 
     setStartAtMs(firstBeatAtMs);
-    setResult(null);
+    setCompleted(null);
     setPhase('running');
   }, []);
 
@@ -128,7 +136,10 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
       const finished = run.result(nativeNow());
       if (finished !== null) {
         clearInterval(id);
-        setResult(finished);
+        setCompleted({
+          result: finished,
+          deliveryJitterMs: standardDeviation(delaysRef.current),
+        });
         setPhase('done');
       }
     }, 50);
@@ -184,9 +195,68 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
   return (
     <Screen>
       <Text style={textStyles.headline}>Done</Text>
+      {completed ? <ResultTable trial={completed} /> : null}
       <BigButton label="Again" onPress={() => setPhase('intro')} />
       {onExit ? <BigButton label="Menu" onPress={onExit} /> : null}
     </Screen>
+  );
+}
+
+/** "3 (2 double-touch, 1 before start)" — every rejection, with its reason. */
+function describeRejections(result: PacedTapResult): string {
+  const labels: Record<PacedTapRejection, string> = {
+    debounce: 'double-touch',
+    'before-window': 'before start',
+    'after-window': 'after end',
+  };
+  const counts = new Map<PacedTapRejection, number>();
+  for (const tap of result.taps) {
+    if (tap.rejection !== null) counts.set(tap.rejection, (counts.get(tap.rejection) ?? 0) + 1);
+  }
+  const parts = [...counts].map(([reason, n]) => `${n} ${labels[reason]}`);
+  return `${result.rejectedCount} (${parts.join(', ')})`;
+}
+
+/**
+ * Developer view of a trial. Participants never see numbers — the plan's rule
+ * is that no score, percentage or streak is ever shown — so this table exists
+ * for development and, later, for the researcher's screen only.
+ */
+function ResultTable({ trial }: { trial: CompletedTrial }): React.JSX.Element {
+  const { result } = trial;
+  const signed = (ms: number): string => `${ms > 0 ? '+' : ''}${ms.toFixed(0)} ms`;
+
+  return (
+    <View style={styles.table}>
+      <Row label="Beats" value={String(result.beats.length)} />
+      <Row label="Hit" value={String(result.matches.length)} />
+      <Row label="Missed" value={String(result.missedBeatIndices.length)} />
+      <Row label="Extra taps" value={String(result.extraTapIndices.length)} />
+      <Row
+        label="Average timing"
+        value={
+          result.meanAsynchronyMs === null
+            ? '—'
+            : `${signed(result.meanAsynchronyMs)} (${result.meanAsynchronyMs < 0 ? 'early' : 'late'})`
+        }
+      />
+      <Row
+        label="Wobble (SD)"
+        value={result.sdAsynchronyMs === null ? '—' : `${result.sdAsynchronyMs.toFixed(1)} ms`}
+      />
+      {result.rejectedCount > 0 ? (
+        <Row label="Rejected" value={describeRejections(result)} muted />
+      ) : null}
+      <Row
+        label="Delivery jitter"
+        value={
+          trial.deliveryJitterMs === null
+            ? '—'
+            : `${trial.deliveryJitterMs.toFixed(1)} ms (diagnostic)`
+        }
+        muted
+      />
+    </View>
   );
 }
 
@@ -226,4 +296,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: colours.amberBright,
   },
+
+  table: { alignSelf: 'stretch', paddingHorizontal: layout.gutter * 4, gap: 4 },
 });
