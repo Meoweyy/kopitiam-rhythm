@@ -18,4 +18,5 @@ const path = require('path');
 module.exports = {
   preset: '@react-native/jest-preset',
   modulePaths: [path.resolve(__dirname, 'node_modules')],
+  setupFiles: [path.resolve(__dirname, 'jest.setup.js')],
 };

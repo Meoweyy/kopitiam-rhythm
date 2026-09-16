@@ -15,12 +15,13 @@ import React, { useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { AudioCheckScreen } from './src/screens/AudioCheckScreen';
 import { PacedTapScreen } from './src/screens/PacedTapScreen';
 import { SpeedTapScreen } from './src/screens/SpeedTapScreen';
 import { BigButton, Screen, textStyles } from './src/ui/controls';
 import { colours } from './src/ui/theme';
 
-type Choice = 'menu' | 'speed-tap' | 'paced-tap';
+type Choice = 'menu' | 'speed-tap' | 'paced-tap' | 'audio-check';
 
 function App(): React.JSX.Element {
   const [choice, setChoice] = useState<Choice>('menu');
@@ -38,11 +39,14 @@ function App(): React.JSX.Element {
               <Text style={textStyles.bodyMuted}>Developer menu</Text>
               <BigButton label="Speed tap (C1)" onPress={() => setChoice('speed-tap')} />
               <BigButton label="The kettle (R1)" onPress={() => setChoice('paced-tap')} />
+              <BigButton label="Sound check" onPress={() => setChoice('audio-check')} />
             </Screen>
           ) : choice === 'speed-tap' ? (
             <SpeedTapScreen onExit={() => setChoice('menu')} />
-          ) : (
+          ) : choice === 'paced-tap' ? (
             <PacedTapScreen onExit={() => setChoice('menu')} />
+          ) : (
+            <AudioCheckScreen onExit={() => setChoice('menu')} />
           )}
         </View>
       </SafeAreaView>

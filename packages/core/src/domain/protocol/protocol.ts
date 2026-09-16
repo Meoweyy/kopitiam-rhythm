@@ -37,6 +37,8 @@
  * analysis can tell which rules produced which data.
  *
  * History
+ *  - v1.3.0  Added `cue.clickHz` and `cue.clickMs` — the auditory cue's
+ *            waveform — as the audio engine was started (S1). PILOT.
  *  - v1.2.0  Added `cue` — the visual pacing cue's stimulus properties (cups
  *            on the table, flash length), as R1's presenter was built. Both
  *            PILOT.
@@ -46,7 +48,7 @@
  *            the ten and under-reporting the rate by 8.5%.
  *  - v1.0.0  Initial.
  */
-export const PROTOCOL_VERSION = 'v1.2.0';
+export const PROTOCOL_VERSION = 'v1.3.0';
 
 const protocol = {
   version: PROTOCOL_VERSION,
@@ -102,6 +104,15 @@ const protocol = {
      * the fastest tempo so consecutive flashes never merge. PILOT.
      */
     visualFlashMs: 150,
+    /**
+     * The auditory cue: a tone burst with a 1 ms attack and exponential
+     * decay. 1 kHz is the convention in the synchronisation literature and
+     * sits below the region where age-related hearing loss begins, so it
+     * stays audible for the population. PILOT: duration to be confirmed on
+     * the tablet's speaker, which rolls off at low frequencies.
+     */
+    clickHz: 1000,
+    clickMs: 30,
   },
 
   /**

@@ -147,6 +147,32 @@ matching is time-only.
 
 **Test count: 142 core (vitest) + 4 app (jest) = 146.** All green at last run.
 
+### 16 Sep — M9 audio, S1: hello click + readout
+
+The sound plan (S1–S5, then backing music as S6) is in §11. Decisions: `AudioTrack` from Kotlin
+rather than Oboe (same path on this device, no MMAP; escalate only if needed); the beat click is
+synthesised in code from protocol values; backing music will be sample-pack *hits* placed on
+the grid by a renderer at the participant's tempo, never pre-recorded loops.
+
+Built:
+- `app/src/specs/NativeAudioEngine.ts` — TurboModule contract; codegen generates the Kotlin base
+  class (`package.json` → `codegenConfig`).
+- `app/android/.../audio/AudioEngineModule.kt` — `playClick(hz, ms)`: renders 1 s mono PCM with
+  the click at 200 ms, opens a static low-latency track at the native rate, plays, polls
+  `getTimestamp()` 30× at 20 ms, returns a readout. Click parameters are *arguments*, so the
+  stimulus stays defined in the protocol, not in Kotlin.
+- `KopitiamPackage.kt` — registers the app's own modules; `MainApplication.kt` adds it.
+- `packages/core/src/analysis/clock-map.ts` — `fitClockMap(anchors)`: centred least squares of
+  nanoTime on frame position → ns/frame, intercept, implied sample rate, residual SD. Tests
+  include the 44.1-vs-48 kHz trap and that the rate estimate tightens with anchor span.
+- `AudioCheckScreen.tsx` — dev screen; "Sound check" on the menu.
+- `jest.setup.js` — mocks the native module so `<App />` mounts in Jest.
+- **Protocol v1.3.0**: `cue.clickHz` (1000) and `cue.clickMs` (30), PILOT.
+
+Readout on the tablet: see §5. Pass.
+
+**Test count: 151 core + 4 app = 155.**
+
 ---
 
 ## 4. Environment
@@ -195,6 +221,7 @@ MediaTek Helio P22T. The user owns it; whether it becomes the *study* device is 
 | `android.hardware.audio.pro` | not declared | |
 | `aaudio.mmap_policy` property | **absent** | Strongest hint that Oboe may not get an exclusive MMAP stream at M9 → `getTimestamp` may be unavailable → degradation path (variability endpoints OK, calibrated asynchrony not) |
 | **3.5 mm headphone jack** | **present** (`mt-snd-card Headset Jack`) | Excellent for M10: electrical loopback test possible without USB adapter |
+| **Audio from inside the app** (S1, 16 Sep, `AudioTrack` + `PERFORMANCE_MODE_LOW_LATENCY`) | Advertised 48 kHz / **256 frames (5.3 ms)**; granted 48 kHz; performance mode **low-latency granted** despite the feature flag being absent; 0 underruns; `getTimestamp()` 27/30 reads (first 3 fail before output, normal); implied rate **47999.6 Hz**; clock-fit residual SD **0.012 ms**; uptime − nanoTime = −0.80 ms (same clock; uptime is truncated to ms) | **The audio path is good.** Fast mixer granted, timestamps stable to ~10 µs, clock runs true, same clock base as touch. Resolves the biggest tablet unknown. `AudioTrack` suffices; Oboe not needed. Still unknown: the constant output latency (frame → speaker), which is M10's loopback |
 | Touch panel | `/dev/input/event7` "mtk-tpd" | Owned `system:input` 660 — shell cannot read raw events |
 | Touch scan rate | **~120 Hz** (8.3 ms period; two drags, 18 intervals, via `dumpsys input` RecentQueue — §1) | Tap quantisation ≤8 ms, uniform → ~2.4 ms SD on a raw tap, ~3.4 ms on an interval. Small next to a 25–35 ms behavioural SD. **Caveat:** 18 intervals from finger drags; whether the panel ever idles to a lower rate, and the rate under a *tap* rather than a drag, are confirmed by V5 at M8 |
 
