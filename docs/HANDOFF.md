@@ -117,7 +117,35 @@ provide. Fix: run is *armed* by the button, *started* by the first accepted tap.
 `startTimeoutMs` (20 s) and `spanMs`. PROTOCOL_VERSION bumped to v1.1.0 — the snapshot test
 caught the change and refused to pass until the version moved, exactly as designed.
 
-**Test count: 89 core (vitest) + 3 app (jest) = 92.** All green at last run.
+### 16 Sep — R1, the kettle game, visual only (`6a208b0` … `3e19d03`)
+
+Built in eight small pieces, each verified on the tablet before the next. **M4 (C2) is on
+hold** by the user's decision; R1 was built directly on a placeholder tempo.
+
+| Piece | What | Where |
+|---|---|---|
+| 1 | Beat schedule — `start + k × ioi`, multiplied never accumulated, frozen | `core/src/domain/beats/beat-schedule.ts` |
+| 2a | Matching — one function for live feedback *and* analysis; inclusive window, closest-first, ties to earlier beat; asynchrony = tap − beat | `core/src/analysis/matching.ts` |
+| 2b | `PacedTapRun` — collects taps against a schedule; per-pad debounce; window opens one match-window before beat 0, closes `trialGraceMs` after the last | `core/src/domain/blocks/paced-tap.ts` |
+| 3 | Landscape lock (`sensorLandscape`) | `AndroidManifest.xml` |
+| 4 | `TurningTable` — angle is `beatPositionAt(clock())` every frame, **not** an animation timer; clock injected | `app/src/ui/TurningTable.tsx` |
+| 5 | Kettle flash on the beat, clock-driven fade; table stops at the last cup. **Protocol v1.2.0** adds `cue.cupsOnTable` (8) and `cue.visualFlashMs` (150), PILOT | same + `protocol.ts` |
+| 6 | Pad wired to the run; one-directional feedback (bloom on near-beat, nothing on miss), "near" decided by the same matcher | `app/src/screens/PacedTapScreen.tsx` |
+| 7 | Dev results table with per-reason rejection breakdown | same |
+| 8 | Dev menu in `App.tsx`; shared controls extracted to `app/src/ui/controls.tsx` | |
+
+**Placeholders, loud in `PacedTapScreen.tsx`, not protocol values:** tempo 700 ms (C2's job),
+16 beats per trial (undesigned), side = right (session-level decision, undesigned).
+
+**Not modelled yet, deliberately:** hidden/phantom beats (R4), side patterns (R2/R3), whether
+a tap on the wrong pad matches. `Beat.side` and `PacedTap.side` are recorded as facts;
+matching is time-only.
+
+**User's first R1 run** (visual cue only, debug build): 16/16 hit, mean −6 ms, SD 48 ms,
+1 rejected, jitter 4.1 ms. The SD is about double what an auditory cue is expected to give
+— consistent with the visual-vs-auditory synchronisation literature. That gap is what M9 is for.
+
+**Test count: 142 core (vitest) + 4 app (jest) = 146.** All green at last run.
 
 ---
 
@@ -261,17 +289,19 @@ port abstractions and the synthetic tapper still need to be built — probably a
 
 **Health check is complete (§1).** Nothing found that changes the plan.
 
-**Then the kettle game (R1), by the user's decision on 16 Sep — M4 (C2) is on hold.**
-Two stages: (1) visual only — the table turns, cups reach the kettle, tap when they arrive, at
-a fixed placeholder tempo (~700 ms) since C2 does not exist yet; (2) then audio (M9). Rationale:
-R1 is the study; building it concretely shows what a beat schedule and a scored tap actually
-need before `Block` (M5) and persistence (M6) are designed around them. This means three
-concrete blocks may exist before the `Block` interface is extracted — that is within the
-"extract, don't guess" rule, not against it.
+**R1 visual-only is complete (§3, 16 Sep).** The next decision is the user's. Options, with
+honest sizes:
 
-**Still to do, in whatever order fits:** M4 (C2 natural tempo — half a day, reuses C1's
-structure; the placeholder tempo in R1 becomes the locked C2 value), M5 (extract `Block`, plus
-the deferred M2 ports + fakes + `SyntheticTapper`), M6–M7 persistence and export.
+| Option | What | Size | Why now / why not |
+|---|---|---|---|
+| **M9 audio** | Kotlin/Oboe click track; read back real sample rate, buffer, timestamp availability | 3–4 days, native | The study's actual cue, and the biggest unknown about this tablet (no low-latency flag). Risk-first: the first thing learned may be that the A7 Lite is not the study device — which is the point of learning it early |
+| M8 touch hook | `dispatchTouchEvent` → kernel timestamps; historical samples | 1–2 days, Kotlin | Smaller native step before Oboe; makes tap timing defensible; enables the proper scan-rate measurement |
+| M4 C2 | Natural tempo | half a day | Replaces the placeholder tempo. On hold by user |
+| M5 extract `Block` | Now with C1 + R1 as two concrete cases; plus deferred M2 ports/fakes/`SyntheticTapper` | 1 day | Structural; no visible change |
+| M6–M7 persistence + export | SQLite + CSV | 1.5 days | Until this exists every run is lost on exit |
+
+Session's recommendation: M9 next, staged small (hello-click → read back stream properties
+→ pre-rendered trial track → clock map), because it answers the tablet-qualification question.
 
 Full sequence in `docs/PLAN.md`.
 
