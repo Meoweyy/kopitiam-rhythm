@@ -48,6 +48,47 @@ export interface AudioReadout {
   readonly playCalledAtMs: number;
 }
 
+/** What to render for one trial. All values come from the protocol on the JS side. */
+export interface ClickTrackSpec {
+  readonly ioiMs: number;
+  readonly beatCount: number;
+  /** Silence before the first click. */
+  readonly leadInMs: number;
+  /** Silence after the last click, so the track outlives the response window. */
+  readonly tailMs: number;
+  readonly clickHz: number;
+  readonly clickMs: number;
+}
+
+/**
+ * Returned as soon as the track is playing and a few timestamps have landed —
+ * about 150 ms after `play()`, well inside the lead-in. Enough to fit a clock
+ * map and place every beat on the tap clock before the first click sounds.
+ */
+export interface ClickTrackStart {
+  readonly sampleRate: number;
+  readonly totalFrames: number;
+  /**
+   * Frame index of each click's onset, in order. This is the ground truth:
+   * beat k is at `clickFrames[k]`, placed by `round((leadIn + k × ioi) × rate)`
+   * — one multiplication from the anchor, never a running sum.
+   */
+  readonly clickFrames: readonly number[];
+  readonly performanceMode: string;
+  readonly playCalledAtMs: number;
+  /** The first valid timestamp reads. */
+  readonly anchors: readonly AudioTimestampSample[];
+}
+
+/** Returned when playback has run to the end (or was stopped). */
+export interface ClickTrackEnd {
+  /** Every timestamp read across the whole track, including those in `ClickTrackStart`. */
+  readonly anchors: readonly AudioTimestampSample[];
+  readonly underrunCount: number;
+  /** True if `stopClickTrack` cut it short. */
+  readonly stopped: boolean;
+}
+
 export interface Spec extends TurboModule {
   /**
    * Renders one second of silence with a click at 200 ms, opens a low-latency
@@ -57,6 +98,19 @@ export interface Spec extends TurboModule {
    * stays in the protocol on the JS side, not duplicated in Kotlin.
    */
   playClick(clickHz: number, clickMs: number): Promise<AudioReadout>;
+
+  /**
+   * Renders a whole trial's clicks into one buffer and starts playing it.
+   * One `play()` per trial: there is no per-click scheduling to jitter.
+   * Rejects if a track is already playing.
+   */
+  startClickTrack(spec: ClickTrackSpec): Promise<ClickTrackStart>;
+
+  /** Resolves when the current track finishes. Rejects if none was started. */
+  finishClickTrack(): Promise<ClickTrackEnd>;
+
+  /** Stops the current track early, if any. `finishClickTrack` then resolves with `stopped: true`. */
+  stopClickTrack(): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('AudioEngine');

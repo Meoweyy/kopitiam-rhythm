@@ -12,11 +12,9 @@ import android.os.SystemClock
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.WritableArray
 import com.kopitiamrhythm.specs.NativeAudioEngineSpec
-import kotlin.math.PI
-import kotlin.math.exp
-import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
  * The native audio engine. S1: one click, and a report of what the device gave us.
@@ -47,13 +45,107 @@ import kotlin.math.sin
 class AudioEngineModule(reactContext: ReactApplicationContext) :
   NativeAudioEngineSpec(reactContext) {
 
+  /** The trial currently playing, if any. One at a time, by design. */
+  @Volatile private var current: ClickTrackPlayer? = null
+
   override fun getName(): String = NAME
 
-  override fun playClick(clickHz: Double, clickMs: Double, promise: Promise) {
+  private fun requireApi26(promise: Promise): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       promise.reject("unsupported", "Audio engine needs Android 8 (API 26) or newer")
+      return false
+    }
+    return true
+  }
+
+  private fun nativeSampleRate(): Int {
+    val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    return audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 48_000
+  }
+
+  // ---- S2: the trial-length click track ------------------------------------
+
+  override fun startClickTrack(spec: ReadableMap, promise: Promise) {
+    if (!requireApi26(promise)) return
+    if (current != null) {
+      promise.reject("busy", "a click track is already playing")
       return
     }
+    val parsed =
+      ClickTrackSpec(
+        ioiMs = spec.getDouble("ioiMs"),
+        beatCount = spec.getInt("beatCount"),
+        leadInMs = spec.getDouble("leadInMs"),
+        tailMs = spec.getDouble("tailMs"),
+        clickHz = spec.getDouble("clickHz"),
+        clickMs = spec.getDouble("clickMs"),
+      )
+    val player = ClickTrackPlayer(nativeSampleRate(), parsed)
+    current = player
+
+    // `start()` blocks for the warm-up; keep that off the module thread.
+    Thread({
+      try {
+        val started = player.start()
+        val result = Arguments.createMap()
+        result.putInt("sampleRate", started.sampleRate)
+        result.putInt("totalFrames", started.totalFrames)
+        val frames = Arguments.createArray()
+        for (f in started.clickFrames) frames.pushInt(f)
+        result.putArray("clickFrames", frames)
+        result.putString("performanceMode", describePerformanceMode(started.performanceMode))
+        result.putDouble("playCalledAtMs", started.playCalledAtNanos / 1e6)
+        result.putArray("anchors", anchorsToArray(started.anchors))
+        promise.resolve(result)
+      } catch (error: Exception) {
+        current = null
+        promise.reject("audio", error)
+      }
+    }, "click-track-start").start()
+  }
+
+  override fun finishClickTrack(promise: Promise) {
+    val player = current
+    if (player == null) {
+      promise.reject("none", "no click track was started")
+      return
+    }
+    Thread({
+      try {
+        val end = player.awaitEnd()
+        val result = Arguments.createMap()
+        result.putArray("anchors", anchorsToArray(end.anchors))
+        result.putInt("underrunCount", end.underrunCount)
+        result.putBoolean("stopped", end.stopped)
+        promise.resolve(result)
+      } catch (error: Exception) {
+        promise.reject("audio", error)
+      } finally {
+        if (current === player) current = null
+      }
+    }, "click-track-finish").start()
+  }
+
+  override fun stopClickTrack(promise: Promise) {
+    current?.stop()
+    promise.resolve(null)
+  }
+
+  private fun anchorsToArray(anchors: List<Anchor>): WritableArray {
+    val array = Arguments.createArray()
+    for (a in anchors) {
+      val m = Arguments.createMap()
+      m.putDouble("framePosition", a.framePosition.toDouble())
+      m.putDouble("nanoTime", a.nanoTime.toDouble())
+      array.pushMap(m)
+    }
+    return array
+  }
+
+  // ---- S1: one click and a readout -----------------------------------------
+
+  override fun playClick(clickHz: Double, clickMs: Double, promise: Promise) {
+    if (!requireApi26(promise)) return
 
     var track: AudioTrack? = null
     try {
@@ -81,7 +173,7 @@ class AudioEngineModule(reactContext: ReactApplicationContext) :
       val sampleRate = nativeSampleRate
       val totalFrames = sampleRate
       val pcm = ShortArray(totalFrames)
-      renderClick(pcm, startFrame = sampleRate / 5, sampleRate, clickHz, clickMs)
+      ClickSynth.render(pcm, startFrame = sampleRate / 5, sampleRate, clickHz, clickMs)
 
       val format =
         AudioFormat.Builder()
@@ -151,31 +243,6 @@ class AudioEngineModule(reactContext: ReactApplicationContext) :
         } catch (_: IllegalStateException) {}
         it.release()
       }
-    }
-  }
-
-  /**
-   * A tone burst with a 1 ms linear attack and an exponential decay to the
-   * end of `clickMs`. The fast attack is what gives the click a sharp,
-   * unambiguous onset; the decay keeps it from clicking again when it stops.
-   */
-  private fun renderClick(
-    pcm: ShortArray,
-    startFrame: Int,
-    sampleRate: Int,
-    clickHz: Double,
-    clickMs: Double,
-  ) {
-    val clickFrames = (clickMs / 1000.0 * sampleRate).roundToInt()
-    val attackFrames = (0.001 * sampleRate).roundToInt().coerceAtLeast(1)
-    val amplitude = 0.8 * Short.MAX_VALUE
-    for (i in 0 until clickFrames) {
-      val frame = startFrame + i
-      if (frame >= pcm.size) break
-      val t = i.toDouble() / sampleRate
-      val attack = if (i < attackFrames) i.toDouble() / attackFrames else 1.0
-      val decay = exp(-5.0 * i / clickFrames)
-      pcm[frame] = (sin(2.0 * PI * clickHz * t) * attack * decay * amplitude).roundToInt().toShort()
     }
   }
 

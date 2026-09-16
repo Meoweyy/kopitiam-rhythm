@@ -8,5 +8,8 @@ jest.mock('./src/specs/NativeAudioEngine', () => ({
   __esModule: true,
   default: {
     playClick: jest.fn(() => Promise.reject(new Error('no native audio in Jest'))),
+    startClickTrack: jest.fn(() => Promise.reject(new Error('no native audio in Jest'))),
+    finishClickTrack: jest.fn(() => Promise.reject(new Error('no native audio in Jest'))),
+    stopClickTrack: jest.fn(() => Promise.resolve()),
   },
 }));
