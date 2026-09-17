@@ -63,7 +63,10 @@ import { colours, layout } from '../ui/theme';
 import { TurningTable } from '../ui/TurningTable';
 import { nativeNow, readTouchTimestamps } from '../timing/touch-clock';
 
-/** STAND-IN until C2 exists. Not a protocol value. See the note at the top. */
+/**
+ * STAND-IN used only when no tempo has been locked by C2 yet. Not a protocol
+ * value. See the note at the top.
+ */
 const PLACEHOLDER_TEMPO_MS = 700;
 /** STAND-IN. How many beats a trial has is decided when R1's trial shape is designed. */
 const PLACEHOLDER_BEAT_COUNT = 16;
@@ -86,7 +89,15 @@ interface CompletedTrial {
   readonly impliedSampleRate: number | null;
 }
 
-export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.Element {
+export function PacedTapScreen({
+  tempoMs,
+  onExit,
+}: {
+  /** The participant's locked tempo from C2. Falls back to the placeholder when absent. */
+  tempoMs?: number | null;
+  onExit?: () => void;
+}): React.JSX.Element {
+  const ioiMs = tempoMs ?? PLACEHOLDER_TEMPO_MS;
   const [phase, setPhase] = useState<Phase>('intro');
   const [completed, setCompleted] = useState<CompletedTrial | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,11 +123,11 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
     void (async () => {
       try {
         const start = await NativeAudioEngine.startClickTrack({
-          ioiMs: PLACEHOLDER_TEMPO_MS,
+          ioiMs,
           beatCount: PLACEHOLDER_BEAT_COUNT,
           // A whole number of beats, so the first cup starts on the grid and
           // its approach is the tempo.
-          leadInMs: PROTOCOL.session.leadInBeats * PLACEHOLDER_TEMPO_MS,
+          leadInMs: PROTOCOL.session.leadInBeats * ioiMs,
           tailMs: PROTOCOL.session.trialGraceMs,
           clickHz: PROTOCOL.cue.clickHz,
           clickMs: PROTOCOL.cue.clickMs,
@@ -131,11 +142,11 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
 
         const beats = buildBeatSchedule({
           startAtMs: firstBeatAtMs,
-          ioiMs: PLACEHOLDER_TEMPO_MS,
+          ioiMs,
           beatCount: PLACEHOLDER_BEAT_COUNT,
           side: PLACEHOLDER_SIDE,
         });
-        runRef.current = new PacedTapRun(defaultPacedTapConfig(beats, PLACEHOLDER_TEMPO_MS));
+        runRef.current = new PacedTapRun(defaultPacedTapConfig(beats, ioiMs));
         delaysRef.current = [];
         audioEndRef.current = NativeAudioEngine.finishClickTrack();
 
@@ -146,7 +157,7 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
         setPhase('intro');
       }
     })();
-  }, []);
+  }, [ioiMs]);
 
   // Leaving mid-trial must silence the track.
   useEffect(
@@ -228,6 +239,11 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
         <Text style={textStyles.body}>
           Watch the table turn. Each time a cup reaches the kettle, tap.
         </Text>
+        <Text style={textStyles.bodyMuted}>
+          {tempoMs == null
+            ? `Tempo: ${PLACEHOLDER_TEMPO_MS} ms (placeholder — play "Your own pace" first)`
+            : `Tempo: ${tempoMs.toFixed(0)} ms — your own pace`}
+        </Text>
         {error ? <Text style={textStyles.bodyMuted}>Sound failed: {error}</Text> : null}
         <BigButton
           label={phase === 'starting' ? 'Starting…' : 'Start'}
@@ -244,7 +260,7 @@ export function PacedTapScreen({ onExit }: { onExit?: () => void }): React.JSX.E
         <View style={styles.tableArea}>
           <TurningTable
             startAtMs={startAtMs}
-            ioiMs={PLACEHOLDER_TEMPO_MS}
+            ioiMs={ioiMs}
             beatCount={PLACEHOLDER_BEAT_COUNT}
             side={PLACEHOLDER_SIDE}
             clock={nativeNow}

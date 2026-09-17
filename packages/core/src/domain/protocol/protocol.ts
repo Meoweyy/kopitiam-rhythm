@@ -37,6 +37,9 @@
  * analysis can tell which rules produced which data.
  *
  * History
+ *  - v1.5.0  Added `naturalTempo.startTimeoutMs`, as C2 was built. C2 reuses
+ *            C1's start-on-first-tap window and needs its own timeout rather
+ *            than borrowing C1's.
  *  - v1.4.0  `session.leadInMs` (1500) → `session.leadInBeats` (2). The lead-in
  *            is now a whole number of beats, so the first cup starts exactly
  *            that many slots from the kettle and its approach reads as the
@@ -55,7 +58,7 @@
  *            the ten and under-reporting the rate by 8.5%.
  *  - v1.0.0  Initial.
  */
-export const PROTOCOL_VERSION = 'v1.4.0';
+export const PROTOCOL_VERSION = 'v1.5.0';
 
 const protocol = {
   version: PROTOCOL_VERSION,
@@ -87,9 +90,15 @@ const protocol = {
     startTimeoutMs: 20_000,
   },
 
-  /** C2 — comfortable tapping. Sets the tempo every other block runs at. */
+  /**
+   * C2 — comfortable tapping. Sets the tempo every other block runs at:
+   * the median inter-tap interval, clamped to `tempo`, locked at session 1
+   * and never recomputed. Later sessions' C2 is kept for monitoring only.
+   */
   naturalTempo: {
     durationMs: 10_000,
+    /** As for C1: the window opens on the first tap, and this bounds the wait. PILOT. */
+    startTimeoutMs: 20_000,
   },
 
   /**

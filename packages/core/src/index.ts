@@ -51,6 +51,18 @@ export {
   standardDeviation,
 } from './analysis/tap-stats';
 
+// M4 — block C2, the natural tempo. Reuses C1's run; adds the estimate.
+export {
+  defaultNaturalTempoConfig,
+  defaultNaturalTempoLimits,
+  estimateNaturalTempo,
+} from './domain/blocks/natural-tempo';
+export type {
+  NaturalTempoEstimate,
+  NaturalTempoLimits,
+  TempoClamp,
+} from './domain/blocks/natural-tempo';
+
 // R1, piece 1 — the beat grid every paced block is scored against.
 export { beatPositionAt, beatTimeAt, buildBeatSchedule } from './domain/beats/beat-schedule';
 export type { Beat, BeatScheduleConfig } from './domain/beats/beat-schedule';

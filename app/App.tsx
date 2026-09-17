@@ -16,15 +16,22 @@ import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { AudioCheckScreen } from './src/screens/AudioCheckScreen';
+import { NaturalTempoScreen } from './src/screens/NaturalTempoScreen';
 import { PacedTapScreen } from './src/screens/PacedTapScreen';
 import { SpeedTapScreen } from './src/screens/SpeedTapScreen';
 import { BigButton, Screen, textStyles } from './src/ui/controls';
 import { colours } from './src/ui/theme';
 
-type Choice = 'menu' | 'speed-tap' | 'paced-tap' | 'audio-check';
+type Choice = 'menu' | 'speed-tap' | 'natural-tempo' | 'paced-tap' | 'audio-check';
 
 function App(): React.JSX.Element {
   const [choice, setChoice] = useState<Choice>('menu');
+  /**
+   * The tempo locked by C2, for the paced blocks. Lives here until the
+   * session runner (M5) and persistence (M6) give it a proper home; until
+   * then it lasts as long as the app does.
+   */
+  const [lockedTempoMs, setLockedTempoMs] = useState<number | null>(null);
 
   return (
     <SafeAreaProvider>
@@ -36,15 +43,29 @@ function App(): React.JSX.Element {
           {choice === 'menu' ? (
             <Screen>
               <Text style={textStyles.headline}>Kopitiam Rhythm</Text>
-              <Text style={textStyles.bodyMuted}>Developer menu</Text>
+              <Text style={textStyles.bodyMuted}>
+                Developer menu
+                {lockedTempoMs === null
+                  ? ' — no tempo locked'
+                  : ` — tempo ${lockedTempoMs.toFixed(0)} ms`}
+              </Text>
               <BigButton label="Speed tap (C1)" onPress={() => setChoice('speed-tap')} />
+              <BigButton label="Your own pace (C2)" onPress={() => setChoice('natural-tempo')} />
               <BigButton label="The kettle (R1)" onPress={() => setChoice('paced-tap')} />
               <BigButton label="Sound check" onPress={() => setChoice('audio-check')} />
             </Screen>
           ) : choice === 'speed-tap' ? (
             <SpeedTapScreen onExit={() => setChoice('menu')} />
+          ) : choice === 'natural-tempo' ? (
+            <NaturalTempoScreen
+              onLocked={(tempoMs) => {
+                setLockedTempoMs(tempoMs);
+                setChoice('menu');
+              }}
+              onExit={() => setChoice('menu')}
+            />
           ) : choice === 'paced-tap' ? (
-            <PacedTapScreen onExit={() => setChoice('menu')} />
+            <PacedTapScreen tempoMs={lockedTempoMs} onExit={() => setChoice('menu')} />
           ) : (
             <AudioCheckScreen onExit={() => setChoice('menu')} />
           )}
