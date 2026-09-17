@@ -50,6 +50,14 @@ export interface TurningTableProps {
   readonly cupCount: number;
   /** How long the kettle stays lit after a cup arrives, fading linearly. */
   readonly flashMs: number;
+  /**
+   * How many beats, from the first, are cued. After the last cued beat's
+   * flash the lights go out: the table keeps turning unseen and the kettle
+   * stops flashing, until the beat after the last one on the grid — the
+   * power coming back on — reveals where the cups landed. Defaults to every
+   * beat, which never goes dark.
+   */
+  readonly cuedBeats?: number;
   /** Diameter, in dp. */
   readonly size?: number;
 }
@@ -66,11 +74,13 @@ export function TurningTable({
   turning,
   cupCount,
   flashMs,
+  cuedBeats = beatCount,
   size = 320,
 }: TurningTableProps): React.JSX.Element {
   const stepDeg = 360 / cupCount;
   const rotationDeg = useRef(new Animated.Value(0)).current;
   const kettleGlow = useRef(new Animated.Value(0)).current;
+  const darkness = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!turning) return undefined;
@@ -82,9 +92,9 @@ export function TurningTable({
       // The table turns until the last cup is at the kettle, then holds.
       rotationDeg.setValue(Math.min(position, beatCount - 1) * stepDeg);
 
-      // The kettle lights on each scheduled beat and fades over flashMs. Both
-      // the timing and the fade are read from the clock, so a dropped frame
-      // shortens the flash rather than delaying it.
+      // The kettle lights on each cued beat and fades over flashMs. Both the
+      // timing and the fade are read from the clock, so a dropped frame
+      // shortens the flash rather than delaying it. Phantom beats never light.
       //
       // Known limit of a visual cue: the flash is drawn on the first frame
       // after the beat, up to one display refresh (~17 ms at 60 Hz) late. The
@@ -92,14 +102,21 @@ export function TurningTable({
       // is the precise one.
       const beatIndex = Math.floor(position);
       const sinceBeatMs = (position - beatIndex) * ioiMs;
-      const onScheduledBeat = beatIndex >= 0 && beatIndex < beatCount;
-      kettleGlow.setValue(onScheduledBeat ? Math.max(0, 1 - sinceBeatMs / flashMs) : 0);
+      const onCuedBeat = beatIndex >= 0 && beatIndex < cuedBeats;
+      kettleGlow.setValue(onCuedBeat ? Math.max(0, 1 - sinceBeatMs / flashMs) : 0);
+
+      // The power cut: dark from the end of the last cued flash until the
+      // beat after the last one on the grid. Read from the clock like
+      // everything else, so it cannot drift from the audio going silent.
+      const lightsOutAt = cuedBeats - 1 + flashMs / ioiMs;
+      const dark = cuedBeats < beatCount && position >= lightsOutAt && position < beatCount;
+      darkness.setValue(dark ? 1 : 0);
 
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [turning, startAtMs, ioiMs, beatCount, clock, stepDeg, flashMs, rotationDeg, kettleGlow]);
+  }, [turning, startAtMs, ioiMs, beatCount, cuedBeats, clock, stepDeg, flashMs, rotationDeg, kettleGlow, darkness]);
 
   const geometry = useMemo(() => tableGeometry(size), [size]);
   const kettleAngle = KETTLE_ANGLE[side];
@@ -187,6 +204,13 @@ export function TurningTable({
           ]}
         />
       </View>
+
+      {/* The power cut. Covers the table and the kettle; the pad below is
+          not part of this component and stays. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.darkness, { width: geometry.frame, height: geometry.frame, opacity: darkness }]}
+      />
     </View>
   );
 }
@@ -247,5 +271,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: colours.amberBright,
+  },
+  darkness: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: colours.ink,
   },
 });

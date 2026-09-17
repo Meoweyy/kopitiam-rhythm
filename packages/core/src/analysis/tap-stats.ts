@@ -64,6 +64,28 @@ export function standardDeviation(values: readonly number[]): number | null {
 }
 
 /**
+ * Slope of `ys` against `xs` by ordinary least squares, in y-units per x-unit.
+ *
+ * Returns `null` with fewer than two points or when every x is the same.
+ * Used for drift: asynchrony against beat index, where a positive slope means
+ * the taps are sliding later beat by beat.
+ */
+export function slope(xs: readonly number[], ys: readonly number[]): number | null {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+  const meanX = mean(xs.slice(0, n))!;
+  const meanY = mean(ys.slice(0, n))!;
+  let sxx = 0;
+  let sxy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i]! - meanX;
+    sxx += dx * dx;
+    sxy += dx * (ys[i]! - meanY);
+  }
+  return sxx === 0 ? null : sxy / sxx;
+}
+
+/**
  * Coefficient of variation: SD divided by the mean.
  *
  * Scale-free, which is why it is the study's consistency measure rather than

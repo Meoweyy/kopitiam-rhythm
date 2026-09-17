@@ -17,12 +17,12 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { AudioCheckScreen } from './src/screens/AudioCheckScreen';
 import { NaturalTempoScreen } from './src/screens/NaturalTempoScreen';
-import { PacedTapScreen } from './src/screens/PacedTapScreen';
+import { PacedTapScreen, measurementBlackout } from './src/screens/PacedTapScreen';
 import { SpeedTapScreen } from './src/screens/SpeedTapScreen';
 import { BigButton, Screen, textStyles } from './src/ui/controls';
 import { colours } from './src/ui/theme';
 
-type Choice = 'menu' | 'speed-tap' | 'natural-tempo' | 'paced-tap' | 'audio-check';
+type Choice = 'menu' | 'speed-tap' | 'natural-tempo' | 'paced-tap' | 'blackout' | 'audio-check';
 
 function App(): React.JSX.Element {
   const [choice, setChoice] = useState<Choice>('menu');
@@ -49,10 +49,17 @@ function App(): React.JSX.Element {
                   ? ' — no tempo locked'
                   : ` — tempo ${lockedTempoMs.toFixed(0)} ms`}
               </Text>
-              <BigButton label="Speed tap (C1)" onPress={() => setChoice('speed-tap')} />
-              <BigButton label="Your own pace (C2)" onPress={() => setChoice('natural-tempo')} />
-              <BigButton label="The kettle (R1)" onPress={() => setChoice('paced-tap')} />
-              <BigButton label="Sound check" onPress={() => setChoice('audio-check')} />
+              {/* Two columns: a single column of six 72 dp buttons overflows a
+                  601 dp screen, and an overflowing screen tripped a native
+                  view-mounting bug (see the R4 commit). Keep every screen
+                  inside the viewport, or scroll it. */}
+              <View style={styles.menuGrid}>
+                <BigButton label="Speed tap (C1)" onPress={() => setChoice('speed-tap')} />
+                <BigButton label="Your own pace (C2)" onPress={() => setChoice('natural-tempo')} />
+                <BigButton label="The kettle (R1)" onPress={() => setChoice('paced-tap')} />
+                <BigButton label="The power cut (R4)" onPress={() => setChoice('blackout')} />
+                <BigButton label="Sound check" onPress={() => setChoice('audio-check')} />
+              </View>
             </Screen>
           ) : choice === 'speed-tap' ? (
             <SpeedTapScreen onExit={() => setChoice('menu')} />
@@ -66,6 +73,12 @@ function App(): React.JSX.Element {
             />
           ) : choice === 'paced-tap' ? (
             <PacedTapScreen tempoMs={lockedTempoMs} onExit={() => setChoice('menu')} />
+          ) : choice === 'blackout' ? (
+            <PacedTapScreen
+              tempoMs={lockedTempoMs}
+              blackout={measurementBlackout()}
+              onExit={() => setChoice('menu')}
+            />
           ) : (
             <AudioCheckScreen onExit={() => setChoice('menu')} />
           )}
@@ -77,6 +90,13 @@ function App(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colours.ground },
+  menuGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 24,
+    maxWidth: 640,
+  },
 });
 
 export default App;

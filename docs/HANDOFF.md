@@ -173,6 +173,38 @@ Readout on the tablet: see §5. Pass.
 
 **Test count: 151 core + 4 app = 155.**
 
+### 17–18 Sep — S2–S4 audio, M4 (C2), and R4 the power cut
+
+Audio S2 (`4690930`): one `play()` per trial; every click pre-rendered into one buffer at
+`round((leadIn + k × ioi) × rate)`; playback and polling on their own thread; `startClickTrack`
+resolves ~120 ms after play with the click frames and warm-up anchors, `finishClickTrack` at
+the end. S3 (`13aacfa`): `fitClockOffset` — slope fixed at the sample rate, offset from the
+warm-up anchors; free-slope `fitClockMap` kept as the watchdog. S4 (`6050c06`): the schedule's
+start comes from the audio; scoring no longer touches the provisional JS clock at all. Lead-in
+became 2 beats (v1.4.0). C2 (`5c6dc53`): natural tempo, clamped, locked, used by R1 (v1.5.0).
+
+**R4 (this commit).** `Beat.cued`; `buildBeatSchedule({ cuedBeats })`; `summariseContinuation`
+(continuation CV, synchronisation CV, cue dependence, tempo drift ratio, asynchrony drift);
+the click track takes `cuedBeats` and `trailingClicks` — the blackout is zeros in the same
+buffer; `TurningTable` goes dark after the last cued flash and reveals at the first trailing
+click; `PacedTapScreen` takes a `blackout` config (`measurementBlackout()` from the protocol);
+in the dark every accepted tap blooms, because a near-beat-only bloom would be a cue by
+another route. Results screen scrolls. Audio engine has `Log.i` tracing under tag
+`KopitiamAudio`, and the JS side times out the start after 5 s instead of waiting forever.
+
+**User's first R4 run** (700 ms placeholder tempo, 8 cued + 35 phantom): 32 continuation taps;
+continuation CV **5.1%**; tempo drift **+9.4% (slowing)**; synchronisation CV 11.0% (only 7
+intervals, first tap +103 ms late — the first-beat problem again); per-beat asynchronies show
+the drift sawtooth (taps re-assigned to the next beat once more than half a beat behind).
+
+**Known limits recorded from that run:** (1) the overall asynchrony SD and "beats hit" rows are
+meaningless for R4 once drift exceeds half a beat — hide or relabel them for R4; the
+asynchrony-slope drift measure fails the same way, the tempo ratio is the robust one, and M13
+detrends before computing variability anyway. (2) The first beat remains unpredictable; the
+user rejected a count-in; BAASTA simply discards the first taps, which M13 will do.
+
+**Test count: 186 core + 4 app = 190.**
+
 ---
 
 ## 4. Environment
@@ -189,6 +221,15 @@ Readout on the tablet: see §5. Pass.
 | Flutter | Installed at `C:\src\flutter` but unused. Deletable. |
 
 **Gotchas met during setup:**
+- **A screen whose content overflows the viewport breaks native view mounting on this React
+  Native build (0.87.1, Fabric).** Found 18 Sep, cost an hour. Symptom: the JS side transitions
+  normally (state, effects, audio all run) but the display freezes on the previous screen;
+  logcat shows `SurfaceMountingManager:MissingViewState … Unable to find viewState for tag
+  [N] for removeViewAt/addViewAt`, repeated every frame. Trigger was six 72 dp buttons in one
+  column on the dev menu (taller than 601 dp); a later, unrelated screen then failed to draw.
+  Bisected by file, confirmed by making the menu fit (two columns). **Rule: every screen fits
+  the viewport or scrolls (`ScrollView`).** Results tables scroll. View culling and view
+  recycling are off by default in this build, so it is not those flags.
 - Android platforms now have minor versions: `platforms;android-37` does not exist, use
   `android-37.0`. RN's `compileSdkVersion = 37` resolved against it fine.
 - `sdkmanager --licenses` cannot be fed via pipe in this shell (stdin is null). Worked with a

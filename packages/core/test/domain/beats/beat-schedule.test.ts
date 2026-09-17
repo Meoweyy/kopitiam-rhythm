@@ -74,6 +74,34 @@ describe('buildBeatSchedule', () => {
     });
   });
 
+  describe('cued and phantom beats', () => {
+    it('cues every beat by default', () => {
+      expect(buildBeatSchedule(config).every((b) => b.cued)).toBe(true);
+    });
+
+    it('cues the first cuedBeats and makes the rest phantom, on the same grid', () => {
+      const beats = buildBeatSchedule({ ...config, cuedBeats: 3 });
+
+      expect(beats.map((b) => b.cued)).toEqual([true, true, true, false, false, false, false, false]);
+      // Phantom beats are real beats: same spacing, same indices.
+      expect(beats[3]!.atMs - beats[2]!.atMs).toBe(config.ioiMs);
+      expect(beats[7]!.atMs).toBe(config.startAtMs + 7 * config.ioiMs);
+    });
+
+    it('allows every beat to be cued explicitly', () => {
+      expect(buildBeatSchedule({ ...config, cuedBeats: 8 }).every((b) => b.cued)).toBe(true);
+    });
+
+    it('refuses zero cued beats — there would be nothing to continue from', () => {
+      expect(() => buildBeatSchedule({ ...config, cuedBeats: 0 })).toThrow(RangeError);
+    });
+
+    it('refuses more cued beats than beats, and fractional counts', () => {
+      expect(() => buildBeatSchedule({ ...config, cuedBeats: 9 })).toThrow(RangeError);
+      expect(() => buildBeatSchedule({ ...config, cuedBeats: 2.5 })).toThrow(RangeError);
+    });
+  });
+
   describe('immutability', () => {
     it('returns a frozen list of frozen beats', () => {
       const beats = buildBeatSchedule(config);

@@ -80,6 +80,11 @@ export type {
   PacedTapResult,
 } from './domain/blocks/paced-tap';
 
+// R4 — what the taps did after the cue stopped. Descriptive; M13 cleans.
+export { summariseContinuation } from './analysis/continuation';
+export type { ContinuationSummary } from './analysis/continuation';
+export { slope } from './analysis/tap-stats';
+
 // M9 / S1 — the audio clock map: frame position ↔ monotonic time.
 export { fitClockMap, fitClockOffset, nanoTimeOfFrame, uptimeMsOfFrame } from './analysis/clock-map';
 export type { ClockAnchor, ClockMap } from './analysis/clock-map';

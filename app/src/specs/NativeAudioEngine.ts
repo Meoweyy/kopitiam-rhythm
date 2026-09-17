@@ -51,7 +51,19 @@ export interface AudioReadout {
 /** What to render for one trial. All values come from the protocol on the JS side. */
 export interface ClickTrackSpec {
   readonly ioiMs: number;
+  /** Beats on the grid, cued and phantom together. */
   readonly beatCount: number;
+  /**
+   * How many beats, from the first, get a click. The rest are phantom:
+   * on the grid, silent. Omit to click every beat.
+   */
+  readonly cuedBeats?: number;
+  /**
+   * Clicks played after the last beat on the grid — the power coming back
+   * on. Without them a recording's alignment would have to extrapolate
+   * across the very window being measured. Omit for none.
+   */
+  readonly trailingClicks?: number;
   /** Silence before the first click. */
   readonly leadInMs: number;
   /** Silence after the last click, so the track outlives the response window. */
@@ -69,11 +81,14 @@ export interface ClickTrackStart {
   readonly sampleRate: number;
   readonly totalFrames: number;
   /**
-   * Frame index of each click's onset, in order. This is the ground truth:
-   * beat k is at `clickFrames[k]`, placed by `round((leadIn + k × ioi) × rate)`
-   * — one multiplication from the anchor, never a running sum.
+   * Frame index of each beat's onset, cued or phantom, in order. This is the
+   * ground truth: beat k is at `clickFrames[k]`, placed by
+   * `round((leadIn + k × ioi) × rate)` — one multiplication from the anchor,
+   * never a running sum. A phantom beat has a frame and no click.
    */
   readonly clickFrames: readonly number[];
+  /** Frame index of each trailing click, on the same grid after the last beat. */
+  readonly trailingClickFrames: readonly number[];
   readonly performanceMode: string;
   readonly playCalledAtMs: number;
   /** The first valid timestamp reads. */

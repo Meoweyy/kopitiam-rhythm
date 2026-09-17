@@ -9,6 +9,7 @@ import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -71,33 +72,52 @@ class AudioEngineModule(reactContext: ReactApplicationContext) :
       promise.reject("busy", "a click track is already playing")
       return
     }
+    val beatCount = spec.getInt("beatCount")
+    val cuedBeats = if (spec.hasKey("cuedBeats") && !spec.isNull("cuedBeats")) spec.getInt("cuedBeats") else beatCount
+    val trailingClicks =
+      if (spec.hasKey("trailingClicks") && !spec.isNull("trailingClicks")) spec.getInt("trailingClicks") else 0
+    if (beatCount < 1 || cuedBeats < 1 || cuedBeats > beatCount || trailingClicks < 0) {
+      promise.reject("spec", "need 1 <= cuedBeats <= beatCount and trailingClicks >= 0")
+      return
+    }
     val parsed =
       ClickTrackSpec(
         ioiMs = spec.getDouble("ioiMs"),
-        beatCount = spec.getInt("beatCount"),
+        beatCount = beatCount,
+        cuedBeats = cuedBeats,
+        trailingClicks = trailingClicks,
         leadInMs = spec.getDouble("leadInMs"),
         tailMs = spec.getDouble("tailMs"),
         clickHz = spec.getDouble("clickHz"),
         clickMs = spec.getDouble("clickMs"),
       )
+    Log.i(TAG, "startClickTrack: beats=$beatCount cued=$cuedBeats trailing=$trailingClicks ioi=${parsed.ioiMs}")
     val player = ClickTrackPlayer(nativeSampleRate(), parsed)
     current = player
 
     // `start()` blocks for the warm-up; keep that off the module thread.
+    // Catch Throwable, not Exception: an OutOfMemoryError from a long track
+    // must reject the promise too, or the screen waits forever.
     Thread({
       try {
+        Log.i(TAG, "startClickTrack: thread running, totalFrames=${player.totalFrames}")
         val started = player.start()
+        Log.i(TAG, "startClickTrack: playing, ${started.anchors.size} warm-up anchors")
         val result = Arguments.createMap()
         result.putInt("sampleRate", started.sampleRate)
         result.putInt("totalFrames", started.totalFrames)
         val frames = Arguments.createArray()
         for (f in started.clickFrames) frames.pushInt(f)
         result.putArray("clickFrames", frames)
+        val trailing = Arguments.createArray()
+        for (f in started.trailingClickFrames) trailing.pushInt(f)
+        result.putArray("trailingClickFrames", trailing)
         result.putString("performanceMode", describePerformanceMode(started.performanceMode))
         result.putDouble("playCalledAtMs", started.playCalledAtNanos / 1e6)
         result.putArray("anchors", anchorsToArray(started.anchors))
         promise.resolve(result)
-      } catch (error: Exception) {
+      } catch (error: Throwable) {
+        Log.e(TAG, "startClickTrack failed", error)
         current = null
         promise.reject("audio", error)
       }
@@ -113,12 +133,14 @@ class AudioEngineModule(reactContext: ReactApplicationContext) :
     Thread({
       try {
         val end = player.awaitEnd()
+        Log.i(TAG, "finishClickTrack: ended, ${end.anchors.size} anchors, underruns=${end.underrunCount}, stopped=${end.stopped}")
         val result = Arguments.createMap()
         result.putArray("anchors", anchorsToArray(end.anchors))
         result.putInt("underrunCount", end.underrunCount)
         result.putBoolean("stopped", end.stopped)
         promise.resolve(result)
-      } catch (error: Exception) {
+      } catch (error: Throwable) {
+        Log.e(TAG, "finishClickTrack failed", error)
         promise.reject("audio", error)
       } finally {
         if (current === player) current = null
@@ -270,5 +292,6 @@ class AudioEngineModule(reactContext: ReactApplicationContext) :
 
   companion object {
     const val NAME = "AudioEngine"
+    private const val TAG = "KopitiamAudio"
   }
 }

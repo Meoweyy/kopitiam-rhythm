@@ -40,7 +40,14 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import {
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 
 import {
   PROTOCOL,
@@ -51,13 +58,17 @@ import {
   fitClockOffset,
   matchTapsToBeats,
   standardDeviation,
+  summariseContinuation,
   uptimeMsOfFrame,
+  type ContinuationSummary,
   type Hand,
   type PacedTapRejection,
   type PacedTapResult,
 } from '@kopitiam/core';
 
-import NativeAudioEngine, { type ClickTrackEnd } from '../specs/NativeAudioEngine';
+import NativeAudioEngine, {
+  type ClickTrackEnd,
+} from '../specs/NativeAudioEngine';
 import { BigButton, Row, Screen, textStyles } from '../ui/controls';
 import { colours, layout } from '../ui/theme';
 import { TurningTable } from '../ui/TurningTable';
@@ -79,8 +90,58 @@ type Phase = 'intro' | 'starting' | 'running' | 'done';
 /** How long the bloom takes to fade. Feedback, not measurement, so an animation timer is fine. */
 const BLOOM_FADE_MS = 250;
 
+/** How long to wait for the audio engine to report that it is playing. */
+const AUDIO_START_TIMEOUT_MS = 5000;
+
+/** Rejects with `message` if `promise` has not settled within `ms`. */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${message} within ${ms / 1000} s`)),
+      ms,
+    );
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      cause => {
+        clearTimeout(timer);
+        reject(cause);
+      },
+    );
+  });
+}
+
+/**
+ * R4's shape. With it, the trial is cued for `cuedBeats`, then the sound
+ * stops and the table goes dark while phantom beats keep falling for
+ * `continuationMs`, then `trailingClicks` bring the power back. Without it,
+ * the trial is R1: every beat cued.
+ */
+export interface BlackoutConfig {
+  readonly cuedBeats: number;
+  readonly continuationMs: number;
+  readonly trailingClicks: number;
+}
+
+/** The measurement-session power cut, from the protocol. Identical for both arms. */
+export function measurementBlackout(): BlackoutConfig {
+  return {
+    cuedBeats: PROTOCOL.blackout.measurementCuedBeats,
+    continuationMs: PROTOCOL.blackout.measurementContinuationMs,
+    trailingClicks: PROTOCOL.blackout.trailingClicks,
+  };
+}
+
 interface CompletedTrial {
   readonly result: PacedTapResult;
+  /** Present for R4: what the taps did after the cue stopped. */
+  readonly continuation: ContinuationSummary | null;
   /** Spread of the touch-to-JS delay. Diagnostic only; see SpeedTapScreen for why spread, not size. */
   readonly deliveryJitterMs: number | null;
   /** The audio engine's end-of-track report, once it arrives. */
@@ -91,13 +152,25 @@ interface CompletedTrial {
 
 export function PacedTapScreen({
   tempoMs,
+  blackout = null,
   onExit,
 }: {
   /** The participant's locked tempo from C2. Falls back to the placeholder when absent. */
   tempoMs?: number | null;
+  /** R4 when present; R1 when null. */
+  blackout?: BlackoutConfig | null;
   onExit?: () => void;
 }): React.JSX.Element {
   const ioiMs = tempoMs ?? PLACEHOLDER_TEMPO_MS;
+  // R4's grid is the cued beats plus as many phantom beats as the continuation
+  // window holds at this tempo — so a slower tapper gets fewer beats in the
+  // same time, and the protocol's coupling test guarantees enough of them.
+  const beatCount =
+    blackout === null
+      ? PLACEHOLDER_BEAT_COUNT
+      : blackout.cuedBeats + Math.floor(blackout.continuationMs / ioiMs);
+  const cuedBeats = blackout === null ? beatCount : blackout.cuedBeats;
+
   const [phase, setPhase] = useState<Phase>('intro');
   const [completed, setCompleted] = useState<CompletedTrial | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,54 +183,68 @@ export function PacedTapScreen({
   const bloom = useRef(new Animated.Value(0)).current;
   const [startAtMs, setStartAtMs] = useState(0);
 
-  const beginRun = useCallback((event: GestureResponderEvent) => {
-    // The button's own touch teaches the clock adapter the offset between the
-    // platform touch clock and the JS clock. Since S4 that offset drives only
-    // the visuals; the beat times below come from the audio.
-    readTouchTimestamps(event.nativeEvent.timestamp);
+  const beginRun = useCallback(
+    (event: GestureResponderEvent) => {
+      // The button's own touch teaches the clock adapter the offset between the
+      // platform touch clock and the JS clock. Since S4 that offset drives only
+      // the visuals; the beat times below come from the audio.
+      readTouchTimestamps(event.nativeEvent.timestamp);
 
-    setError(null);
-    setCompleted(null);
-    setPhase('starting');
+      setError(null);
+      setCompleted(null);
+      setPhase('starting');
 
-    void (async () => {
-      try {
-        const start = await NativeAudioEngine.startClickTrack({
-          ioiMs,
-          beatCount: PLACEHOLDER_BEAT_COUNT,
-          // A whole number of beats, so the first cup starts on the grid and
-          // its approach is the tempo.
-          leadInMs: PROTOCOL.session.leadInBeats * ioiMs,
-          tailMs: PROTOCOL.session.trialGraceMs,
-          clickHz: PROTOCOL.cue.clickHz,
-          clickMs: PROTOCOL.cue.clickMs,
-        });
+      void (async () => {
+        try {
+          // The engine answers ~120 ms after play(). If it has not answered in
+          // five seconds something is wrong, and a visible error beats a screen
+          // that says "Starting…" forever.
+          const start = await withTimeout(
+            NativeAudioEngine.startClickTrack({
+              ioiMs,
+              beatCount,
+              cuedBeats,
+              trailingClicks: blackout?.trailingClicks ?? 0,
+              // A whole number of beats, so the first cup starts on the grid and
+              // its approach is the tempo.
+              leadInMs: PROTOCOL.session.leadInBeats * ioiMs,
+              tailMs: PROTOCOL.session.trialGraceMs,
+              clickHz: PROTOCOL.cue.clickHz,
+              clickMs: PROTOCOL.cue.clickMs,
+            }),
+            AUDIO_START_TIMEOUT_MS,
+            'the audio engine did not start',
+          );
 
-        // Frozen for the trial: slope fixed at the sample rate, offset from
-        // the warm-up anchors. Click 0's frame, on the touch clock, is the
-        // schedule's start.
-        const map = fitClockOffset(start.anchors, start.sampleRate);
-        if (map === null) throw new Error('audio engine returned no timestamps');
-        const firstBeatAtMs = uptimeMsOfFrame(map, start.clickFrames[0]!);
+          // Frozen for the trial: slope fixed at the sample rate, offset from
+          // the warm-up anchors. Click 0's frame, on the touch clock, is the
+          // schedule's start.
+          const map = fitClockOffset(start.anchors, start.sampleRate);
+          if (map === null)
+            throw new Error('audio engine returned no timestamps');
+          const firstBeatAtMs = uptimeMsOfFrame(map, start.clickFrames[0]!);
 
-        const beats = buildBeatSchedule({
-          startAtMs: firstBeatAtMs,
-          ioiMs,
-          beatCount: PLACEHOLDER_BEAT_COUNT,
-          side: PLACEHOLDER_SIDE,
-        });
-        runRef.current = new PacedTapRun(defaultPacedTapConfig(beats, ioiMs));
-        delaysRef.current = [];
-        audioEndRef.current = NativeAudioEngine.finishClickTrack();
+          const beats = buildBeatSchedule({
+            startAtMs: firstBeatAtMs,
+            ioiMs,
+            beatCount,
+            side: PLACEHOLDER_SIDE,
+            cuedBeats,
+          });
+          runRef.current = new PacedTapRun(defaultPacedTapConfig(beats, ioiMs));
+          delaysRef.current = [];
+          audioEndRef.current = NativeAudioEngine.finishClickTrack();
 
-        setStartAtMs(firstBeatAtMs);
-        setPhase('running');
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
-        setPhase('intro');
-      }
-    })();
-  }, [ioiMs]);
+          setStartAtMs(firstBeatAtMs);
+          setPhase('running');
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+          setPhase('intro');
+        }
+      })();
+    },
+    [ioiMs, beatCount, cuedBeats, blackout],
+  );
 
   // Leaving mid-trial must silence the track.
   useEffect(
@@ -179,13 +266,25 @@ export function PacedTapScreen({
       // Feedback is one-directional: a tap near a beat blooms, anything else
       // produces nothing at all. "Near" is decided by the same matcher that
       // scores the trial, so the bloom can never disagree with the data.
+      //
+      // In the dark, the rule changes: a bloom only for taps near a phantom
+      // beat would tell the participant where the withdrawn beat is — a cue
+      // by another route. So after the cut-off every accepted tap blooms,
+      // acknowledging the touch and saying nothing about its timing.
       if (!recorded.accepted) return;
-      const near = matchTapsToBeats(
-        run.config.beats.map((b) => b.atMs),
-        [recorded.atMs],
-        run.config.matchWindowMs,
-      );
-      if (near.matches.length === 0) return;
+      const cuedBeatTimes = run.config.beats
+        .filter(b => b.cued)
+        .map(b => b.atMs);
+      const lastCuedAtMs = cuedBeatTimes[cuedBeatTimes.length - 1] ?? 0;
+      const inTheDark = recorded.atMs > lastCuedAtMs + run.config.matchWindowMs;
+      if (!inTheDark) {
+        const near = matchTapsToBeats(
+          cuedBeatTimes,
+          [recorded.atMs],
+          run.config.matchWindowMs,
+        );
+        if (near.matches.length === 0) return;
+      }
 
       bloom.setValue(1);
       Animated.timing(bloom, {
@@ -211,6 +310,14 @@ export function PacedTapScreen({
         clearInterval(id);
         const trial: CompletedTrial = {
           result: finished,
+          continuation:
+            blackout === null
+              ? null
+              : summariseContinuation(
+                  finished,
+                  ioiMs,
+                  PROTOCOL.blackout.transitionIntervalsExcluded,
+                ),
           deliveryJitterMs: standardDeviation(delaysRef.current),
           audio: null,
           impliedSampleRate: null,
@@ -219,10 +326,15 @@ export function PacedTapScreen({
         setPhase('done');
 
         // The audio report lands a moment later; fill it in when it does.
-        void audioEndRef.current?.then((audio) => {
-          setCompleted((current) =>
+        void audioEndRef.current?.then(audio => {
+          setCompleted(current =>
             current === trial
-              ? { ...trial, audio, impliedSampleRate: fitClockMap(audio.anchors)?.impliedSampleRate ?? null }
+              ? {
+                  ...trial,
+                  audio,
+                  impliedSampleRate:
+                    fitClockMap(audio.anchors)?.impliedSampleRate ?? null,
+                }
               : current,
           );
         });
@@ -230,26 +342,39 @@ export function PacedTapScreen({
     }, 50);
 
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, blackout, ioiMs]);
 
   if (phase === 'intro' || phase === 'starting') {
+    // One string, built here. Two adjacent text children inside a <Text>
+    // broke the native view mounting on this build — see the R4 commit.
+    const tempoLine =
+      (tempoMs == null
+        ? `Tempo: ${PLACEHOLDER_TEMPO_MS} ms (placeholder — play "Your own pace" first)`
+        : `Tempo: ${tempoMs.toFixed(0)} ms — your own pace`) +
+      (blackout === null
+        ? ''
+        : ` · ${blackout.cuedBeats} cued beats, then ${blackout.continuationMs / 1000} s in the dark (${beatCount - cuedBeats} beats)`);
     return (
       <Screen>
-        <Text style={textStyles.headline}>The kettle</Text>
+        <Text style={textStyles.headline}>
+          {blackout === null ? 'The kettle' : 'The power cut'}
+        </Text>
         <Text style={textStyles.body}>
-          Watch the table turn. Each time a cup reaches the kettle, tap.
+          {blackout === null
+            ? 'Watch the table turn. Each time a cup reaches the kettle, tap.'
+            : 'Tap along as before. Then the lights go out and the sound stops — keep tapping at the same pace, in the dark, until the lights come back.'}
         </Text>
-        <Text style={textStyles.bodyMuted}>
-          {tempoMs == null
-            ? `Tempo: ${PLACEHOLDER_TEMPO_MS} ms (placeholder — play "Your own pace" first)`
-            : `Tempo: ${tempoMs.toFixed(0)} ms — your own pace`}
-        </Text>
-        {error ? <Text style={textStyles.bodyMuted}>Sound failed: {error}</Text> : null}
+        <Text style={textStyles.bodyMuted}>{tempoLine}</Text>
+        {error ? (
+          <Text style={textStyles.bodyMuted}>Sound failed: {error}</Text>
+        ) : null}
         <BigButton
           label={phase === 'starting' ? 'Starting…' : 'Start'}
           onTouch={phase === 'starting' ? undefined : beginRun}
         />
-        {onExit && phase === 'intro' ? <BigButton label="Menu" onPress={onExit} /> : null}
+        {onExit && phase === 'intro' ? (
+          <BigButton label="Menu" onPress={onExit} />
+        ) : null}
       </Screen>
     );
   }
@@ -261,7 +386,8 @@ export function PacedTapScreen({
           <TurningTable
             startAtMs={startAtMs}
             ioiMs={ioiMs}
-            beatCount={PLACEHOLDER_BEAT_COUNT}
+            beatCount={beatCount}
+            cuedBeats={cuedBeats}
             side={PLACEHOLDER_SIDE}
             clock={nativeNow}
             turning
@@ -279,20 +405,81 @@ export function PacedTapScreen({
             onStartShouldSetResponder={() => true}
             onResponderGrant={handlePadTouch}
           >
-            <Animated.View style={[styles.bloom, { opacity: bloom }]} pointerEvents="none" />
+            <Animated.View
+              style={[styles.bloom, { opacity: bloom }]}
+              pointerEvents="none"
+            />
           </View>
         </View>
       </View>
     );
   }
 
+  // The R4 table is taller than the screen. It scrolls: a screen whose
+  // content overflows the viewport tripped a native view-mounting bug on
+  // this React Native build, after which nothing later rendered.
   return (
-    <Screen>
+    <ScrollView style={styles.doneScroll} contentContainerStyle={styles.doneContent}>
       <Text style={textStyles.headline}>Done</Text>
       {completed ? <ResultTable trial={completed} /> : null}
-      <BigButton label="Again" onPress={() => setPhase('intro')} />
-      {onExit ? <BigButton label="Menu" onPress={onExit} /> : null}
-    </Screen>
+      <View style={styles.doneButtons}>
+        <BigButton label="Again" onPress={() => setPhase('intro')} />
+        {onExit ? <BigButton label="Menu" onPress={onExit} /> : null}
+      </View>
+    </ScrollView>
+  );
+}
+
+/**
+ * R4's rows. "In the dark" is the primary outcome, descriptively; the rest are
+ * the proposal's secondary timing measures.
+ */
+function ContinuationRows({
+  summary,
+}: {
+  summary: ContinuationSummary;
+}): React.JSX.Element {
+  const pct = (v: number | null): string =>
+    v === null ? '—' : `${(v * 100).toFixed(1)}%`;
+  const signedPct = (v: number | null): string =>
+    v === null ? '—' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%`;
+  return (
+    <>
+      <Row
+        label="In the dark"
+        value={`${summary.continuationTapCount} taps, ${summary.matchedPhantomCount} of ${summary.phantomBeats} beats hit`}
+      />
+      <Row
+        label="Wobble in the dark (CV)"
+        value={pct(summary.continuationCv)}
+      />
+      <Row
+        label="Wobble with the cue (CV)"
+        value={pct(summary.synchronisationCv)}
+      />
+      <Row label="Cue dependence" value={signedPct(summary.cueDependence)} />
+      <Row
+        label="Drift"
+        value={
+          summary.tempoDriftRatio === null
+            ? '—'
+            : `${signedPct(summary.tempoDriftRatio)} (${
+                summary.tempoDriftRatio > 0 ? 'slowing' : 'speeding up'
+              })${
+                summary.asynchronyDriftMsPerBeat === null
+                  ? ''
+                  : `, ${
+                      summary.asynchronyDriftMsPerBeat > 0 ? '+' : ''
+                    }${summary.asynchronyDriftMsPerBeat.toFixed(1)} ms/beat`
+              }`
+        }
+      />
+      <Row
+        label="Excluded"
+        value={`first ${summary.excludedTransitionIntervals} intervals after the cut`}
+        muted
+      />
+    </>
   );
 }
 
@@ -305,7 +492,8 @@ function describeRejections(result: PacedTapResult): string {
   };
   const counts = new Map<PacedTapRejection, number>();
   for (const tap of result.taps) {
-    if (tap.rejection !== null) counts.set(tap.rejection, (counts.get(tap.rejection) ?? 0) + 1);
+    if (tap.rejection !== null)
+      counts.set(tap.rejection, (counts.get(tap.rejection) ?? 0) + 1);
   }
   const parts = [...counts].map(([reason, n]) => `${n} ${labels[reason]}`);
   return `${result.rejectedCount} (${parts.join(', ')})`;
@@ -318,7 +506,8 @@ function describeRejections(result: PacedTapResult): string {
  */
 function ResultTable({ trial }: { trial: CompletedTrial }): React.JSX.Element {
   const { result } = trial;
-  const signed = (ms: number): string => `${ms > 0 ? '+' : ''}${ms.toFixed(0)} ms`;
+  const signed = (ms: number): string =>
+    `${ms > 0 ? '+' : ''}${ms.toFixed(0)} ms`;
 
   return (
     <View style={styles.table}>
@@ -331,18 +520,29 @@ function ResultTable({ trial }: { trial: CompletedTrial }): React.JSX.Element {
         value={
           result.meanAsynchronyMs === null
             ? '—'
-            : `${signed(result.meanAsynchronyMs)} (${result.meanAsynchronyMs < 0 ? 'early' : 'late'})`
+            : `${signed(result.meanAsynchronyMs)} (${
+                result.meanAsynchronyMs < 0 ? 'early' : 'late'
+              })`
         }
       />
       <Row
         label="Wobble (SD)"
-        value={result.sdAsynchronyMs === null ? '—' : `${result.sdAsynchronyMs.toFixed(1)} ms`}
+        value={
+          result.sdAsynchronyMs === null
+            ? '—'
+            : `${result.sdAsynchronyMs.toFixed(1)} ms`
+        }
       />
       <Row
         label="Per beat"
-        value={result.asynchroniesMs.map((a) => (a > 0 ? `+${a.toFixed(0)}` : a.toFixed(0))).join(' ')}
+        value={result.asynchroniesMs
+          .map(a => (a > 0 ? `+${a.toFixed(0)}` : a.toFixed(0)))
+          .join(' ')}
         muted
       />
+      {trial.continuation ? (
+        <ContinuationRows summary={trial.continuation} />
+      ) : null}
       {result.rejectedCount > 0 ? (
         <Row label="Rejected" value={describeRejections(result)} muted />
       ) : null}
@@ -360,16 +560,18 @@ function ResultTable({ trial }: { trial: CompletedTrial }): React.JSX.Element {
         value={
           trial.audio === null
             ? '…'
-            : `${trial.audio.underrunCount} underruns, ${trial.audio.anchors.length} anchors${
-                trial.audio.stopped ? ', stopped early' : ''
-              }`
+            : `${trial.audio.underrunCount} underruns, ${
+                trial.audio.anchors.length
+              } anchors${trial.audio.stopped ? ', stopped early' : ''}`
         }
         muted
       />
       <Row
         label="Audio clock"
         value={
-          trial.impliedSampleRate === null ? '…' : `${trial.impliedSampleRate.toFixed(1)} Hz`
+          trial.impliedSampleRate === null
+            ? '…'
+            : `${trial.impliedSampleRate.toFixed(1)} Hz`
         }
         muted
       />
@@ -415,4 +617,12 @@ const styles = StyleSheet.create({
   },
 
   table: { alignSelf: 'stretch', paddingHorizontal: layout.gutter * 4, gap: 4 },
+
+  doneScroll: { flex: 1, backgroundColor: colours.ground },
+  doneContent: {
+    padding: layout.gutter,
+    alignItems: 'center',
+    gap: layout.gutter,
+  },
+  doneButtons: { flexDirection: 'row', gap: layout.gutter, flexWrap: 'wrap', justifyContent: 'center' },
 });

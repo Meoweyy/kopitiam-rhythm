@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.os.SystemClock
+import android.util.Log
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -14,7 +15,12 @@ data class Anchor(val framePosition: Long, val nanoTime: Long)
 /** What to render. Mirrors `ClickTrackSpec` on the JS side. */
 data class ClickTrackSpec(
   val ioiMs: Double,
+  /** Beats on the grid, cued and phantom together. */
   val beatCount: Int,
+  /** The first `cuedBeats` get a click; the rest are silent phantoms on the grid. */
+  val cuedBeats: Int,
+  /** Clicks after the last beat on the grid — the power coming back on. */
+  val trailingClicks: Int,
   val leadInMs: Double,
   val tailMs: Double,
   val clickHz: Double,
@@ -25,6 +31,7 @@ class ClickTrackStart(
   val sampleRate: Int,
   val totalFrames: Int,
   val clickFrames: IntArray,
+  val trailingClickFrames: IntArray,
   val performanceMode: Int,
   val playCalledAtNanos: Long,
   val anchors: List<Anchor>,
@@ -37,12 +44,19 @@ class ClickTrackEnd(val anchors: List<Anchor>, val underrunCount: Int, val stopp
  *
  * ## One `play()` per trial
  *
- * Every click is written into a single buffer before playback starts: click k
+ * Every click is written into a single buffer before playback starts: beat k
  * at frame `round((leadIn + k × ioi) / 1000 × rate)`, one multiplication from
  * the anchor. Then one `play()`. There is no per-click scheduling, so there is
  * nothing to jitter: the spacing of the clicks is exactly the spacing of the
  * samples, and the only question — answered by the timestamps — is when the
  * whole buffer started.
+ *
+ * ## The power cut is silence in the buffer
+ *
+ * A phantom beat has a frame on the grid and no click rendered at it. The
+ * blackout is therefore not a second scheduling decision, a stop, or a
+ * volume change — it is simply zeros in the same buffer, on the same clock.
+ * The trailing clicks after the last phantom are rendered the same way.
  *
  * ## Threading
  *
@@ -60,19 +74,28 @@ class ClickTrackPlayer(private val sampleRate: Int, private val spec: ClickTrack
   private var end: ClickTrackEnd? = null
   private var track: AudioTrack? = null
 
-  val clickFrames: IntArray =
-    IntArray(spec.beatCount) { k ->
-      ((spec.leadInMs + k * spec.ioiMs) / 1000.0 * sampleRate).roundToLong().toInt()
-    }
+  private fun frameOfBeat(k: Int): Int =
+    ((spec.leadInMs + k * spec.ioiMs) / 1000.0 * sampleRate).roundToLong().toInt()
+
+  /** Every beat on the grid, cued or phantom. */
+  val clickFrames: IntArray = IntArray(spec.beatCount) { k -> frameOfBeat(k) }
+
+  /** The trailing clicks continue the same grid past the last beat. */
+  val trailingClickFrames: IntArray =
+    IntArray(spec.trailingClicks) { j -> frameOfBeat(spec.beatCount + j) }
+
   val totalFrames: Int =
-    ((spec.leadInMs + (spec.beatCount - 1) * spec.ioiMs + spec.clickMs + spec.tailMs) /
-        1000.0 * sampleRate)
+    ((spec.leadInMs + (spec.beatCount + spec.trailingClicks - 1) * spec.ioiMs + spec.clickMs +
+        spec.tailMs) / 1000.0 * sampleRate)
       .roundToInt()
 
   /** Renders, starts playback, and returns after `warmupAnchors` valid reads or `warmupTimeoutMs`. */
   fun start(warmupAnchors: Int = 5, warmupTimeoutMs: Long = 600): ClickTrackStart {
     val pcm = ShortArray(totalFrames)
-    for (frame in clickFrames) ClickSynth.render(pcm, frame, sampleRate, spec.clickHz, spec.clickMs)
+    for (k in 0 until spec.cuedBeats) {
+      ClickSynth.render(pcm, clickFrames[k], sampleRate, spec.clickHz, spec.clickMs)
+    }
+    for (frame in trailingClickFrames) ClickSynth.render(pcm, frame, sampleRate, spec.clickHz, spec.clickMs)
 
     val built =
       AudioTrack.Builder()
@@ -97,6 +120,7 @@ class ClickTrackPlayer(private val sampleRate: Int, private val spec: ClickTrack
 
     val written = built.write(pcm, 0, totalFrames)
     check(written == totalFrames) { "wrote $written of $totalFrames frames" }
+    Log.i(TAG, "track built and written: $totalFrames frames at $sampleRate Hz, mode=${built.performanceMode}")
 
     val playCalledAtNanos = System.nanoTime()
     built.play()
@@ -116,6 +140,7 @@ class ClickTrackPlayer(private val sampleRate: Int, private val spec: ClickTrack
         sampleRate = sampleRate,
         totalFrames = totalFrames,
         clickFrames = clickFrames,
+        trailingClickFrames = trailingClickFrames,
         performanceMode = built.performanceMode,
         playCalledAtNanos = playCalledAtNanos,
         anchors = ArrayList(anchors),
@@ -162,12 +187,14 @@ class ClickTrackPlayer(private val sampleRate: Int, private val spec: ClickTrack
       }
     }
 
+    Log.i(TAG, "poll loop ended: lastFrame=$lastFrame of $totalFrames, stopRequested=$stopRequested")
     val underruns = built.underrunCount
     try {
       built.stop()
     } catch (_: IllegalStateException) {}
     built.release()
     track = null
+    Log.i(TAG, "track released")
 
     synchronized(lock) {
       end = ClickTrackEnd(ArrayList(anchors), underruns, stopRequested)
@@ -178,5 +205,6 @@ class ClickTrackPlayer(private val sampleRate: Int, private val spec: ClickTrack
 
   companion object {
     const val POLL_INTERVAL_MS = 20L
+    private const val TAG = "KopitiamAudio"
   }
 }

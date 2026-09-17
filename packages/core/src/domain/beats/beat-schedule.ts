@@ -22,13 +22,25 @@
  * places clicks in a sample buffer (`frame_k = F0 + round(k × ioi × rate)`),
  * so the visual and audible beats stay on one grid.
  *
+ * ## Cued and phantom beats
+ *
+ * R4 — the power cut — cues the first `cuedBeats` and then goes dark. The
+ * beats after that are *phantom*: scheduled, logged, used as the targets the
+ * participant's continuation taps are scored against, and never played or
+ * shown. That single flag is what lets continuation be measured through the
+ * same code path as synchronisation, with no seam at the cut-off. Blocks that
+ * cue every beat leave `cuedBeats` at the beat count.
+ *
+ * How many beats are cued is the block's decision, not the grid's: fixed at
+ * the protocol's value in measurement sessions so every participant and both
+ * arms are measured on identical material, and set by the cue-fading ladder
+ * in training.
+ *
  * ## What is deliberately absent
  *
  * No clock, no randomness, no notion of "now". The schedule is data. A block
- * decides the start time, the tempo and the sides; this module only lays the
- * grid. Whether a beat is shown or hidden (R4's power cut) is not a property of
- * the grid and is not modelled here yet — it will be added when R4 is built,
- * not guessed at now.
+ * decides the start time, the tempo, the sides and the cut-off; this module
+ * only lays the grid.
  */
 
 import type { Hand } from '../blocks/speed-tap';
@@ -43,6 +55,8 @@ export interface Beat {
   readonly atMs: number;
   /** Which pad this beat asks for. */
   readonly side: Hand;
+  /** True if this beat is played and shown; false if it is a phantom. */
+  readonly cued: boolean;
 }
 
 export interface BeatScheduleConfig {
@@ -57,6 +71,11 @@ export interface BeatScheduleConfig {
    * that pattern when they exist.
    */
   readonly side: Hand;
+  /**
+   * How many beats, from the first, are cued. The rest are phantom. Defaults
+   * to every beat.
+   */
+  readonly cuedBeats?: number;
 }
 
 /**
@@ -67,6 +86,7 @@ export interface BeatScheduleConfig {
  */
 export function buildBeatSchedule(config: BeatScheduleConfig): readonly Beat[] {
   const { startAtMs, ioiMs, beatCount, side } = config;
+  const cuedBeats = config.cuedBeats ?? beatCount;
 
   if (!Number.isFinite(startAtMs)) {
     throw new RangeError(`startAtMs must be finite, got ${startAtMs}`);
@@ -77,10 +97,22 @@ export function buildBeatSchedule(config: BeatScheduleConfig): readonly Beat[] {
   if (!Number.isInteger(beatCount) || beatCount < 1) {
     throw new RangeError(`beatCount must be a positive integer, got ${beatCount}`);
   }
+  // At least one cued beat — a trial with no cue has nothing to continue
+  // from — and at most every beat.
+  if (!Number.isInteger(cuedBeats) || cuedBeats < 1 || cuedBeats > beatCount) {
+    throw new RangeError(`cuedBeats must be an integer from 1 to beatCount, got ${cuedBeats}`);
+  }
 
   const beats: Beat[] = [];
   for (let index = 0; index < beatCount; index += 1) {
-    beats.push(Object.freeze({ index, atMs: beatTimeAt(startAtMs, ioiMs, index), side }));
+    beats.push(
+      Object.freeze({
+        index,
+        atMs: beatTimeAt(startAtMs, ioiMs, index),
+        side,
+        cued: index < cuedBeats,
+      }),
+    );
   }
   return Object.freeze(beats);
 }
