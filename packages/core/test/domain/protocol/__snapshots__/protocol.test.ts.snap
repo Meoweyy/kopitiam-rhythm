@@ -2,7 +2,7 @@
 
 exports[`protocol constants > matches the locked snapshot 1`] = `
 "{
-  "version": "v1.3.0",
+  "version": "v1.4.0",
   "tempo": {
     "minMs": 500,
     "maxMs": 900,
@@ -136,7 +136,7 @@ exports[`protocol constants > matches the locked snapshot 1`] = `
   "session": {
     "maxOnTaskMs": 1500000,
     "restIntervalMs": 240000,
-    "leadInMs": 1500,
+    "leadInBeats": 2,
     "trialGraceMs": 1000
   }
 }"

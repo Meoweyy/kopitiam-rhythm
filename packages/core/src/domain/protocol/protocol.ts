@@ -37,6 +37,13 @@
  * analysis can tell which rules produced which data.
  *
  * History
+ *  - v1.4.0  `session.leadInMs` (1500) → `session.leadInBeats` (2). The lead-in
+ *            is now a whole number of beats, so the first cup starts exactly
+ *            that many slots from the kettle and its approach reads as the
+ *            tempo — the preparation is the motion itself, as in Rhythm
+ *            Tweezers, not a count-in. Found on the tablet: with a
+ *            non-metric lead-in the first arrival was unpredictable and the
+ *            user tapped before it.
  *  - v1.3.0  Added `cue.clickHz` and `cue.clickMs` — the auditory cue's
  *            waveform — as the audio engine was started (S1). PILOT.
  *  - v1.2.0  Added `cue` — the visual pacing cue's stimulus properties (cups
@@ -48,7 +55,7 @@
  *            the ten and under-reporting the rate by 8.5%.
  *  - v1.0.0  Initial.
  */
-export const PROTOCOL_VERSION = 'v1.3.0';
+export const PROTOCOL_VERSION = 'v1.4.0';
 
 const protocol = {
   version: PROTOCOL_VERSION,
@@ -304,8 +311,14 @@ const protocol = {
     maxOnTaskMs: 25 * 60 * 1000,
     /** PILOT: rest offered roughly this often within long blocks. */
     restIntervalMs: 4 * 60 * 1000,
-    /** Silence before the first beat of a trial, so the tablet is settled. */
-    leadInMs: 1_500,
+    /**
+     * Beats of approach before the first scored beat. The table turns and
+     * the first cup travels this many slots to the kettle with nothing to
+     * tap, so the participant reads the tempo off the motion and knows when
+     * the first arrival is. A whole number of beats, so the start is on the
+     * grid. Also covers the audio engine's warm-up (~120 ms). PILOT.
+     */
+    leadInBeats: 2,
     /** Grace period after the last scheduled beat before a trial closes. */
     trialGraceMs: 1_000,
   },

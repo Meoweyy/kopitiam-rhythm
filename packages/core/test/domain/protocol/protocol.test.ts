@@ -89,6 +89,12 @@ describe('protocol constants', () => {
       expect(PROTOCOL.cue.visualFlashMs).toBeLessThan(PROTOCOL.tempo.minMs / 2);
     });
 
+    it('gives the audio engine time to warm up inside the lead-in at the fastest tempo', () => {
+      // The engine's first usable timestamp lands ~120 ms after play(); the
+      // beats are placed from it, so it must arrive well before beat zero.
+      expect(PROTOCOL.session.leadInBeats * PROTOCOL.tempo.minMs).toBeGreaterThanOrEqual(500);
+    });
+
     it('keeps the trial grace at least as long as the widest matching window', () => {
       // A late-but-matchable response to the last beat must fall inside the
       // grace period, or it would be rejected as after the window. The widest

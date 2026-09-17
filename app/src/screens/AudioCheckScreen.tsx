@@ -72,7 +72,7 @@ export function AudioCheckScreen({ onExit }: { onExit?: () => void }): React.JSX
       const start = await NativeAudioEngine.startClickTrack({
         ioiMs: TRACK_TEMPO_MS,
         beatCount: TRACK_BEATS,
-        leadInMs: PROTOCOL.session.leadInMs,
+        leadInMs: PROTOCOL.session.leadInBeats * TRACK_TEMPO_MS,
         tailMs: PROTOCOL.session.trialGraceMs,
         clickHz: PROTOCOL.cue.clickHz,
         clickMs: PROTOCOL.cue.clickMs,
