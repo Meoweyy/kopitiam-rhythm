@@ -1,11 +1,67 @@
 # Handoff — where the previous session stopped and everything it learned
 
-Written 16 Sep 2026 at the end of a session that ran 8–10 Sep. This is the complete context a
-new session needs. `CLAUDE.md` is the short version; `docs/PLAN.md` is the milestone plan.
+First written 16 Sep 2026; §1 and §11 last updated **21 Sep 2026**. This is the complete
+context a new session needs. `CLAUDE.md` is the short version; `docs/PLAN.md` is the milestone
+plan; the user's proposal is `Rhythm_Training_FYP_Report` (they can share it).
 
 ---
 
 ## 1. Where we stopped — read this first
+
+**State on 21 Sep 2026: tree clean at `3de77b6`. Four blocks and the audio engine work on the
+tablet. Nothing is saved yet — the next milestone is persistence (M6).**
+
+| Built | Commit | Status |
+|---|---|---|
+| C1 speed tap | `ca097e4`, `57cea90` | ✅ on tablet |
+| C2 natural tempo — median gap, clamped 500–900, locked, used by R1/R4 | `5c6dc53` | ✅ on tablet |
+| R1 the kettle — turning table, flash, pad, one-directional bloom, click track | pieces `6a208b0`…`3e19d03`, audio `c9ebba8`…`6050c06` | ✅ on tablet |
+| R4 the power cut — phantom beats, silence in the buffer, lights out/up, continuation summary | `3de77b6` | ✅ on tablet; user's first run: continuation CV 5.1%, drift +9.4% slowing |
+| Audio engine (Kotlin `AudioTrack`, TurboModule) — one `play()` per trial, clock map | `c9ebba8`, `4690930`, `13aacfa` | ✅ tablet qualified: 48 kHz, fast path granted, timestamps stable to ~0.02 ms |
+
+**What the app is right now:** a developer menu (`App.tsx`) that opens each block directly.
+C2 locks a tempo into App state for the life of the process; R1 and R4 use it, else a 700 ms
+placeholder. No session runner, no persistence, no export. Every run is lost on leaving the
+screen — the user's R4 result exists only as a photo.
+
+**What was decided this week (not derivable from code):**
+- **M4 (C2) was on hold, then built** on 17 Sep once it was clear the whole design anchors on
+  the personal tempo.
+- **Measurement sessions: fixed 8 cued beats, one locked tempo.** The user asked whether the
+  cut-off should be random; answer no — knowing when the cue stops does not help keep time
+  without it, and a varying cued count would confound the primary outcome (more cue → steadier
+  continuation). Variation lives in the training ladder (16 → 3 cued beats). Recorded in
+  `beat-schedule.ts`.
+- **Training tempo may vary between sets** (fixed within a set), following BAASTA's multi-tempo
+  assessment design and Rhythm Workers' training structure (worlds at 100/90/110/80… BPM,
+  difficulty = distance from the natural tempo). This is a change from the proposal → **for the
+  supervisor**, not built. Measurement sessions stay at the locked tempo.
+- **No count-in clicks** (user rejected). The lead-in is 2 beats of visible approach. The first
+  beat is still unpredictable (+103 ms on the R4 run); BAASTA discards early taps and M13 will.
+- **Literature reviewed with the user** (full texts read): BAASTA (Dalla Bella 2017) supports
+  the *method* — sync–continuation, CV of ITI, 100 ms artefact, ±50 % window, per-tempo norms,
+  variability differs by tempo; it says nothing about training or cognition. Rhythm Workers
+  (Bégel 2018) supports the *training structure* and feasibility only — its tapping group showed
+  no significant improvement; efficacy evidence is the 2022 Parkinson's pilot (d = 0.75, n = 12).
+  Suggested to the user: add BAASTA's anisochrony-detection listening test as a transfer measure.
+- **UI:** a mock-up canvas exists (`https://claude.ai/artifact/RbyDDZCkQmXjyDsNCXggEt`): three
+  directions, then a hand-drawn kopitiam version. The user wants the style of a doodle
+  illustration they found online (thick ink lines, warm flat colour, 3/4 table). That needs real
+  artwork — two generation prompts were given (scene + single cup) to save as
+  `docs/design/scene.png` and `cup.png`; **not done**. User chose to finish functionality first.
+- **Sound sources:** click synthesised in code; backing music from sample-pack hits placed on
+  the grid (S6, not built); backing must stop at blackout and be off in V1.
+
+**Landmine (18 Sep, cost an hour):** a screen whose content overflows the viewport breaks
+native view mounting on this RN build — see §4 gotchas. Every screen fits or scrolls.
+
+**Immediate next step: M6 persistence.** Piece 1 is pure core: the saved shape of a trial (tap
+rows with raw timestamps + acceptance + reason + matched beat; beat rows with cued/phantom;
+trial row with block, tempo, protocol version, audio report). Then SQLite, one transaction per
+trial after it ends; a runs screen; CSV export (M7). Then tidy R4's results (hide the overall
+asynchrony SD and hit count, which mislead under drift), then M5 extraction, then M8.
+
+### 1b. The health check (16 Sep) — kept for the record
 
 **Mid-way through a "health check" the user asked for** before building further. The idea:
 check early for the silent failures that would otherwise surface late in production.
@@ -57,8 +113,16 @@ Metro was running in the background and has since stopped. Restart per `CLAUDE.m
 - **10 Sep** — Android toolchain installed. Tablet connected. **M2 deliberately skipped** (see §8)
   to get something on screen sooner. M3 built and run on the tablet (`ca097e4`). User's own
   tapping data exposed a bug in C1; fixed (`57cea90`). Health check started, then paused.
-- **16 Sep** — This handoff. Later the same day: touch scan rate measured (§1, §5). User put
+- **16 Sep** — First handoff. Later the same day: touch scan rate measured (§1b, §5). User put
   **M4 (C2) on hold** and chose to build the kettle game (R1) next, visual first, audio after.
+  Same day: health check finished; R1 built in eight pieces (visual only); audio S1 (hello
+  click + readout) — the tablet's audio path qualified.
+- **17 Sep** — Audio S2–S4 (click track, clock map, kettle clicks). Literature discussion
+  (BAASTA, Rhythm Workers, the proposal). C2 built. R4 started; user asked for the UI to be
+  improved first → mock-up canvas, then chose functionality first.
+- **18 Sep** — R4 finished after an hour lost to the screen-overflow mounting bug (§4).
+  First R4 run on the tablet.
+- **21 Sep** — Handoff refreshed (§1, §11). Next: M6 persistence.
 
 ---
 
@@ -355,21 +419,19 @@ port abstractions and the synthetic tapper still need to be built — probably a
 
 ## 11. What is next
 
-**Health check is complete (§1).** Nothing found that changes the plan.
+**As of 21 Sep.** Done: health check, R1, audio S1–S4, C2, R4. The measurement chain runs on
+the tablet. Order of value now:
 
-**R1 visual-only is complete (§3, 16 Sep).** The next decision is the user's. Options, with
-honest sizes:
-
-| Option | What | Size | Why now / why not |
+| Next | What | Size | Why |
 |---|---|---|---|
-| **M9 audio** | Kotlin/Oboe click track; read back real sample rate, buffer, timestamp availability | 3–4 days, native | The study's actual cue, and the biggest unknown about this tablet (no low-latency flag). Risk-first: the first thing learned may be that the A7 Lite is not the study device — which is the point of learning it early |
-| M8 touch hook | `dispatchTouchEvent` → kernel timestamps; historical samples | 1–2 days, Kotlin | Smaller native step before Oboe; makes tap timing defensible; enables the proper scan-rate measurement |
-| M4 C2 | Natural tempo | half a day | Replaces the placeholder tempo. On hold by user |
-| M5 extract `Block` | Now with C1 + R1 as two concrete cases; plus deferred M2 ports/fakes/`SyntheticTapper` | 1 day | Structural; no visible change |
-| M6–M7 persistence + export | SQLite + CSV | 1.5 days | Until this exists every run is lost on exit |
-
-Session's recommendation: M9 next, staged small (hello-click → read back stream properties
-→ pre-rendered trial track → clock map), because it answers the tablet-qualification question.
+| **1. M6 persistence** | Core: the saved shape of a trial (pure, tested). Then SQLite, one transaction per trial after it ends, never during play. Then a runs screen | 1.5 days | Every run is currently lost on exit |
+| 2. M7 export | CSV per table + `protocol_v1.json`; open in R | half a day | Data must leave the tablet |
+| 3. R4 results tidy | Hide overall asynchrony SD and hit count for R4 (meaningless under drift); keep the "in the dark" rows | 1 hour | Honest display |
+| 4. M5 extract `Block` | Three concrete blocks now exist; pull out `Block`, `TrialRunner`, the ports + fakes + `SyntheticTapper` deferred from M2; a session runner with `session_kind` (measurement vs training) | 1 day | Before more blocks pile up |
+| 5. M8 touch hook | `dispatchTouchEvent` → kernel timestamps, historical samples | 1–2 days | Defensible timing; proper scan-rate measurement |
+| 6. Sound S5/S6 | Mic check of click isochrony (needs a mic); backing music from sample hits (needs packs; supervisor question on backing) | — | |
+| 7. R2/R3, cue-fading ladder, V1 | The rest of the proposal | Oct | |
+| 8. Art | Two generation prompts given (see §1); files to `docs/design/`; integrate into the kettle screen | when assets exist | |
 
 Full sequence in `docs/PLAN.md`.
 

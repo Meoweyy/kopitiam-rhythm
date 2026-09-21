@@ -42,7 +42,10 @@ collection cannot be fixed — the participants are gone. That single fact drive
 - npm workspaces monorepo: `app/` (RN shell) + `packages/core/` (pure TS)
 - Vitest for core (fast, pure Node); Jest for app (needs RN preset)
 - Android first; iOS in Dec 2026 **only if a Mac is available** (unresolved)
-- On-device SQLite + CSV export (M6–M7, not built yet)
+- On-device SQLite + CSV export (M6–M7, **next up** — nothing is saved yet)
+- Audio: Kotlin `AudioTrack` via a TurboModule, not Oboe (same path on this device; Oboe only if
+  a device ever lacks the fast path). Click synthesised in code; backing music later from
+  sample-pack hits on the grid.
 - No browser dev target exists. A real Android device is required to see the app.
 
 ## Layout
@@ -50,20 +53,24 @@ collection cannot be fixed — the participants are gone. That single fact drive
 ```
 C:\src\fyp\                    <- THE REPO. Not the OneDrive folder.
   CLAUDE.md                    <- this file
-  docs/HANDOFF.md              <- full history, read it
-  docs/PLAN.md                 <- 13 milestones with done-criteria
+  docs/HANDOFF.md              <- full history and current state, read it
+  docs/PLAN.md                 <- 13 milestones with done-criteria (written for Flutter; ideas hold)
   packages/core/               <- pure measurement core
     src/core/rng/              pcg32.ts, seeds.ts
-    src/domain/protocol/       protocol.ts  (every constant, v1.1.0)
-    src/domain/blocks/         speed-tap.ts (C1)
-    src/analysis/              tap-stats.ts (descriptive only; real pipeline is M13)
-    test/                      89 vitest tests
+    src/domain/protocol/       protocol.ts  (every constant, v1.5.0, snapshot-locked)
+    src/domain/beats/          beat-schedule.ts (grid; cued/phantom beats)
+    src/domain/blocks/         speed-tap.ts (C1), natural-tempo.ts (C2), paced-tap.ts (R1/R4 run)
+    src/analysis/              tap-stats.ts, matching.ts (one matcher for game + analysis),
+                               continuation.ts (R4 summary), clock-map.ts (audio frame -> time)
+    test/                      186 vitest tests
   app/                         <- React Native shell
-    App.tsx                    mounts SpeedTapScreen
-    src/screens/SpeedTapScreen.tsx
-    src/timing/touch-clock.ts  provisional clock adapter, replaced at M8
-    src/ui/theme.ts            elder-UI tokens
-    android/                   Kotlin hook goes in MainActivity.kt at M8
+    App.tsx                    developer menu; holds the C2-locked tempo for the process
+    src/screens/               SpeedTap, NaturalTempo, PacedTap (R1; R4 via `blackout` prop), AudioCheck
+    src/specs/NativeAudioEngine.ts   TurboModule contract (codegen -> Kotlin base class)
+    src/ui/                    theme.ts, controls.tsx, TurningTable.tsx
+    src/timing/touch-clock.ts  provisional clock adapter, replaced at M8; scoring no longer uses it
+    android/.../audio/         AudioEngineModule.kt, ClickTrackPlayer.kt, ClickSynth.kt (AudioTrack)
+    android/.../KopitiamPackage.kt   registers the app's native modules; M8 touch hook goes here
 ```
 
 ## How to work
@@ -71,8 +78,8 @@ C:\src\fyp\                    <- THE REPO. Not the OneDrive folder.
 ```bash
 cd C:\src\fyp
 npm run typecheck          # both workspaces
-npm test                   # 89 core + 3 app
-npm run test:core          # core only, ~1.5 s
+npm test                   # 186 core + 4 app
+npm run test:core          # core only, ~3 s
 
 # to see the app on the tablet (plug in, unlock, accept USB debugging prompt):
 adb devices                              # expect R9JT1089PYN  device
@@ -80,9 +87,19 @@ adb reverse tcp:8081 tcp:8081
 cd app && npx react-native start         # Metro, keep running
 # app is already installed; launch it from the tablet, or:
 adb shell am start -n com.kopitiamrhythm/.MainActivity
-# native code changed? full rebuild (~7 min first time, faster after):
+# native code changed? full rebuild (~7 min first time, ~15 s–2 min after):
 cd app/android && ./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
+# JS-only change: Metro serves it; restart the app to be sure:
+adb shell am force-stop com.kopitiamrhythm; adb shell am start -n com.kopitiamrhythm/.MainActivity
+# audio engine trace:  adb logcat -d | Select-String KopitiamAudio
 ```
+
+**Landmine:** a screen whose content overflows the viewport breaks native view mounting on this
+RN build (display freezes on the previous screen while JS runs on). Every screen fits or scrolls.
+Details in `docs/HANDOFF.md` §4.
+
+**Tablet is qualified** (A7 Lite): touch 120 Hz; audio 48 kHz fast path granted, timestamps
+stable to ~0.02 ms. Study runs release builds only. Details in `docs/HANDOFF.md` §5.
 
 Env vars are set at Windows User level; a terminal opened before they were set will not see
 them. `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` and PATH entries for platform-tools.
