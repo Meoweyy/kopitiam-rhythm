@@ -92,6 +92,9 @@ venv/
 # ---------------------------------------------------------------------------
 # Editors / OS
 # ---------------------------------------------------------------------------
+# Word/Excel lock files, created while a document in docs/ is open. One was
+# committed by accident on 21 Sep.
+~$*
 .idea/
 *.iml
 .vscode/*
