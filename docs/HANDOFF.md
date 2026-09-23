@@ -52,6 +52,15 @@ screen — the user's R4 result exists only as a photo.
 - **Sound sources:** click synthesised in code; backing music from sample-pack hits placed on
   the grid (S6, not built); backing must stop at blackout and be off in V1.
 
+- **21 Sep: supervisor checkpoint prepared** — `docs/checkpoints/` holds the Word document,
+  the talking script, and **a source check of the proposal PDF** against the papers. The check
+  found the proposal's gap claims overstated in ways an examiner would catch: Nandi 2023
+  *tested* cued→uncued transfer and found none (the proposal says the question is unanswered —
+  the truth is a stronger argument); Zanto 2022 removed cues in weeks 5–8 and was home-based;
+  Fujioka & Ross 2017 improved continuation tapping with piano training; Kim/Cho/Yoo 2017's
+  variability did *not* separate dementia; the Vorberg & Wing 2004 reference does not exist.
+  The proposal must be corrected before it is cited in the thesis. Details in the file.
+
 **Landmine (18 Sep, cost an hour):** a screen whose content overflows the viewport breaks
 native view mounting on this RN build — see §4 gotchas. Every screen fits or scrolls.
 
@@ -329,6 +338,7 @@ MediaTek Helio P22T. The user owns it; whether it becomes the *study* device is 
 | **Audio from inside the app** (S1, 16 Sep, `AudioTrack` + `PERFORMANCE_MODE_LOW_LATENCY`) | Advertised 48 kHz / **256 frames (5.3 ms)**; granted 48 kHz; performance mode **low-latency granted** despite the feature flag being absent; 0 underruns; `getTimestamp()` 27/30 reads (first 3 fail before output, normal); implied rate **47999.6 Hz**; clock-fit residual SD **0.012 ms**; uptime − nanoTime = −0.80 ms (same clock; uptime is truncated to ms) | **The audio path is good.** Fast mixer granted, timestamps stable to ~10 µs, clock runs true, same clock base as touch. Resolves the biggest tablet unknown. `AudioTrack` suffices; Oboe not needed. Still unknown: the constant output latency (frame → speaker), which is M10's loopback |
 | Touch panel | `/dev/input/event7` "mtk-tpd" | Owned `system:input` 660 — shell cannot read raw events |
 | Touch scan rate | **~120 Hz** (8.3 ms period; two drags, 18 intervals, via `dumpsys input` RecentQueue — §1) | Tap quantisation ≤8 ms, uniform → ~2.4 ms SD on a raw tap, ~3.4 ms on an interval. Small next to a 25–35 ms behavioural SD. **Caveat:** 18 intervals from finger drags; whether the panel ever idles to a lower rate, and the rate under a *tap* rather than a drag, are confirmed by V5 at M8 |
+| **Mic hears its own click** (21 Sep, **one 25 s recording**, Samsung Voice Recorder app → AAC 128 kb/s 44.1 kHz mono, unknown in-app processing; debug build playing "Play track" at 700 ms, user chanting "ko-pi-o" over half of it) | Click peak −6 dBFS, onset silence→full in ~1 ms, acoustic ring ~60 ms (digital click is 30 ms; speaker/room). 16 clicks detected by an 800–1300 Hz band-pass; all 15 gaps **700.000 ms** to one sample (0.023 ms). Voice −27 dBFS vs room floor −56 dBFS (29 dB margin); voice energy mostly <800 Hz so the band-pass separates it from the click even during overlap | V1's click-leakage alignment is viable on this device; the acoustic click is as isochronous as the buffer (the S5 "mic check" in spirit). **Not a qualification:** third-party recorder, single run. In-app PCM capture with `UNPROCESSED` source and record-while-playing in one process are untested — do with V1 (Nov). Analysis scripts were throwaway (scratchpad); syllable onsets ramp over tens of ms, so *where* in the ramp counts as onset is V1's main analytic decision |
 
 **Delivery jitter** (SD of touch-to-JS delay, measured by the app): **4.4 ms** and **3.8 ms**
 across two debug-build runs; **1.1 ms** on a release build (§1). Stable within a build type. Interval noise contribution √2×3.8 ≈ 5.4 ms → ~2–3% inflation of a
